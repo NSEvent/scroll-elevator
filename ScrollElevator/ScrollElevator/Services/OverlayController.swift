@@ -172,8 +172,9 @@ final class OverlayController {
     }
 
     private func restartHideTimer() {
-        guard !isHovering else { return }
         hideTimer?.invalidate()
+        hideTimer = nil
+        guard !settings.neverHide, !isHovering else { return }
         hideTimer = Timer.scheduledTimer(withTimeInterval: settings.hideTimeout, repeats: false) { [weak self] _ in
             self?.hide()
         }
@@ -202,14 +203,6 @@ final class OverlayController {
             self?.hide()
         })
         if let clickMonitor { dismissMonitors.append(clickMonitor) }
-
-        // Escape (or any typing — the user is back to ordinary work). Global key
-        // monitors only deliver once Accessibility is granted; without it the
-        // timeout still hides the overlay.
-        let keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: { [weak self] _ in
-            self?.hide()
-        })
-        if let keyMonitor { dismissMonitors.append(keyMonitor) }
 
         workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,

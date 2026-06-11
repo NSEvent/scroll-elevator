@@ -9,22 +9,25 @@ struct OverlayView: View {
     let onHoverChange: (Bool) -> Void
 
     var body: some View {
+        // Hover is reported per-button, not on the stack: the cursor parks in
+        // the gap between the buttons when the overlay appears, and stack-wide
+        // hover would permanently pause the hide timer.
         VStack(spacing: spacing) {
-            JumpButton(systemImage: "arrow.up.to.line", diameter: buttonDiameter) {
+            JumpButton(systemImage: "arrow.up.to.line", diameter: buttonDiameter, onHoverChange: onHoverChange) {
                 onJump(.top)
             }
-            JumpButton(systemImage: "arrow.down.to.line", diameter: buttonDiameter) {
+            JumpButton(systemImage: "arrow.down.to.line", diameter: buttonDiameter, onHoverChange: onHoverChange) {
                 onJump(.bottom)
             }
         }
         .padding(12)
-        .onHover(perform: onHoverChange)
     }
 }
 
 private struct JumpButton: View {
     let systemImage: String
     let diameter: CGFloat
+    let onHoverChange: (Bool) -> Void
     let action: () -> Void
 
     @State private var hovering = false
@@ -48,6 +51,9 @@ private struct JumpButton: View {
             .animation(.easeOut(duration: 0.12), value: hovering)
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .onHover { value in
+            hovering = value
+            onHoverChange(value)
+        }
     }
 }

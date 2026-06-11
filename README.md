@@ -20,8 +20,10 @@ end. Ignore them and they fade away.
 - The window under the cursor is captured at burst start (scroll-follows-mouse
   means it isn't necessarily the frontmost window). Button clicks post
   `Cmd-↑` / `Cmd-↓` to that app's PID, activating it first if needed.
-- The overlay also hides on timeout, button click, any other click, key press,
-  or app switch.
+- By default the overlay never hides on its own — it stays until the pointer
+  leaves the corridor, a button is clicked, another click lands elsewhere, or
+  the active app changes. An optional hide-after timeout can be enabled in
+  Settings.
 
 ## Permissions
 
@@ -34,7 +36,7 @@ Settings window.
 Menu bar → Settings…
 
 - Enable/disable
-- Hide timeout (1–6 s)
+- Never hide automatically (default on) / hide timeout (1–6 s)
 - Button distance from cursor (30–80 pt, default 56)
 - Scroll threshold before the overlay shows (0–200 pt, default 10)
 - Ignored apps (games, remote desktops, design canvases…)

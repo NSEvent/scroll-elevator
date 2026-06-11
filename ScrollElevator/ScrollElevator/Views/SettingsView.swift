@@ -11,12 +11,15 @@ struct SettingsView: View {
             }
 
             Section("Behavior") {
-                LabeledSlider(
-                    label: "Hide after",
-                    value: $settings.hideTimeout,
-                    range: 1...6,
-                    format: { String(format: "%.1f s", $0) }
-                )
+                Toggle("Never hide automatically", isOn: $settings.neverHide)
+                if !settings.neverHide {
+                    LabeledSlider(
+                        label: "Hide after",
+                        value: $settings.hideTimeout,
+                        range: 1...6,
+                        format: { String(format: "%.1f s", $0) }
+                    )
+                }
                 LabeledSlider(
                     label: "Button distance",
                     value: $settings.placementDistance,

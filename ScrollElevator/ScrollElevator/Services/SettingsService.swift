@@ -4,6 +4,7 @@ import Combine
 final class SettingsService: ObservableObject {
     private enum Key {
         static let enabled = "enabled"
+        static let neverHide = "neverHide"
         static let hideTimeout = "hideTimeout"
         static let placementDistance = "placementDistance"
         static let scrollThreshold = "scrollThreshold"
@@ -16,7 +17,14 @@ final class SettingsService: ObservableObject {
         didSet { defaults.set(enabled, forKey: Key.enabled) }
     }
 
+    /// When true (the default), the overlay never hides on a timer — only when
+    /// the pointer leaves the corridor or a button is clicked.
+    @Published var neverHide: Bool {
+        didSet { defaults.set(neverHide, forKey: Key.neverHide) }
+    }
+
     /// Seconds the overlay stays up before fading out (when not hovered).
+    /// Only applies when neverHide is off.
     @Published var hideTimeout: Double {
         didSet { defaults.set(hideTimeout, forKey: Key.hideTimeout) }
     }
@@ -38,12 +46,14 @@ final class SettingsService: ObservableObject {
     init() {
         defaults.register(defaults: [
             Key.enabled: true,
+            Key.neverHide: true,
             Key.hideTimeout: 2.5,
             Key.placementDistance: 56.0,
             Key.scrollThreshold: 10.0,
             Key.ignoredBundleIDs: [String](),
         ])
         enabled = defaults.bool(forKey: Key.enabled)
+        neverHide = defaults.bool(forKey: Key.neverHide)
         hideTimeout = defaults.double(forKey: Key.hideTimeout)
         placementDistance = defaults.double(forKey: Key.placementDistance)
         scrollThreshold = defaults.double(forKey: Key.scrollThreshold)
