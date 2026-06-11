@@ -45,11 +45,44 @@ final class MenuBarService: NSObject, NSMenuDelegate {
     }
 
     private func updateIcon(enabled: Bool) {
-        statusItem.button?.image = NSImage(
-            systemSymbolName: enabled ? "arrow.up.and.down.circle.fill" : "arrow.up.and.down.circle",
-            accessibilityDescription: "Scroll Elevator"
-        )
+        statusItem.button?.image = Self.hallCallIcon(filled: enabled)
         statusItem.button?.appearsDisabled = !enabled
+    }
+
+    /// Elevator hall-call buttons: two stacked triangles. Filled while active,
+    /// outlined while disabled. Drawn as a template image so the system tints
+    /// it correctly in light/dark menu bars.
+    private static func hallCallIcon(filled: Bool) -> NSImage {
+        let size = NSSize(width: 16, height: 16)
+        let image = NSImage(size: size, flipped: false) { _ in
+            let up = NSBezierPath()
+            up.move(to: NSPoint(x: 8, y: 15))
+            up.line(to: NSPoint(x: 2.8, y: 8.9))
+            up.line(to: NSPoint(x: 13.2, y: 8.9))
+            up.close()
+
+            let down = NSBezierPath()
+            down.move(to: NSPoint(x: 8, y: 1))
+            down.line(to: NSPoint(x: 2.8, y: 7.1))
+            down.line(to: NSPoint(x: 13.2, y: 7.1))
+            down.close()
+
+            NSColor.black.setFill()
+            NSColor.black.setStroke()
+            for path in [up, down] {
+                path.lineJoinStyle = .round
+                if filled {
+                    path.fill()
+                } else {
+                    path.lineWidth = 1.3
+                    path.stroke()
+                }
+            }
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Scroll Elevator"
+        return image
     }
 
     // Rebuild on every open so the checkmarks and Accessibility state are fresh.

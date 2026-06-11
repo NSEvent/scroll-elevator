@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.3 - 2026-06-11
+
+### Changed
+- App icon polished: graphite elevator panel, machined circular buttons with
+  rim lighting, amber-lit up arrow with glow bloom, idle down arrow.
+- Menu bar icon is now a custom template - two stacked elevator hall-call
+  triangles, filled while enabled, outlined while disabled.
+
 ## 0.3.2 - 2026-06-11
 
 ### Fixed
