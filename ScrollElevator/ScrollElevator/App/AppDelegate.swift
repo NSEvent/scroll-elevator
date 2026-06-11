@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayController: OverlayController!
     private var menuBarService: MenuBarService!
     private var settingsWindow: NSWindow?
+    private var onboardingWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         settings = SettingsService()
@@ -14,12 +15,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         scrollMonitor = ScrollMonitor(settings: settings, overlayController: overlayController)
         menuBarService = MenuBarService(
             settings: settings,
-            openSettings: { [weak self] in self?.showSettingsWindow() }
+            openSettings: { [weak self] in self?.showSettingsWindow() },
+            openWelcome: { [weak self] in self?.showOnboardingWindow() }
         )
 
-        // First-run UX: surface the Accessibility prompt immediately rather than
-        // failing silently on the first jump.
-        JumpDispatcher.promptForAccessibilityIfNeeded()
+        if settings.hasCompletedOnboarding {
+            // Returning user: surface the system prompt only if the grant is missing.
+            JumpDispatcher.promptForAccessibilityIfNeeded()
+        } else {
+            showOnboardingWindow()
+        }
 
         scrollMonitor.start()
     }
@@ -30,9 +35,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showSettingsWindow() {
         if settingsWindow == nil {
-            let hosting = NSHostingView(rootView: SettingsView(settings: settings))
+            let hosting = NSHostingView(rootView: SettingsView(
+                settings: settings,
+                openWelcome: { [weak self] in self?.showOnboardingWindow() }
+            ))
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 440, height: 460),
+                contentRect: NSRect(x: 0, y: 0, width: 480, height: 500),
                 styleMask: [.titled, .closable, .miniaturizable],
                 backing: .buffered,
                 defer: false
@@ -44,6 +52,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsWindow = window
         }
         settingsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showOnboardingWindow() {
+        if onboardingWindow == nil {
+            let hosting = NSHostingView(rootView: OnboardingView(
+                settings: settings,
+                dismiss: { [weak self] in
+                    self?.settings.hasCompletedOnboarding = true
+                    self?.onboardingWindow?.close()
+                }
+            ))
+            hosting.frame.size = hosting.fittingSize
+            let window = NSWindow(
+                contentRect: NSRect(origin: .zero, size: hosting.fittingSize),
+                styleMask: [.titled, .closable, .fullSizeContentView],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Welcome to Scroll Elevator"
+            window.titlebarAppearsTransparent = true
+            window.contentView = hosting
+            window.isReleasedWhenClosed = false
+            window.center()
+            onboardingWindow = window
+        }
+        onboardingWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 }

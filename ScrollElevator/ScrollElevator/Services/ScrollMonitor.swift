@@ -1,30 +1,45 @@
 import AppKit
+import Combine
 
-/// Watches global scroll events and groups them into bursts. The overlay shows
-/// after a qualifying burst *ends* (brief quiet period), never on the first tick.
+/// Watches global scroll events and feeds them to the burst state machine.
+/// The overlay shows the moment a burst crosses the scroll threshold —
+/// mid-gesture — and continued scrolling keeps it alive.
 final class ScrollMonitor {
     private let settings: SettingsService
     private let overlayController: OverlayController
 
     private var scrollEventMonitor: Any?
     private var burstEndTimer: Timer?
+    private var cancellables = Set<AnyCancellable>()
 
-    // Active-burst state
+    private var machine = ScrollBurstMachine()
     private var burstTarget: ScrollTarget?
     private var burstIgnored = false
-    private var burstQualified = false
-    private var accumulatedDelta: CGFloat = 0
 
-    /// Quiet period after the last scroll event that ends a burst.
+    /// Quiet period that ends a burst for phase-less wheel-mouse scrolling.
     private let burstEndInterval: TimeInterval = 0.18
 
     init(settings: SettingsService, overlayController: OverlayController) {
         self.settings = settings
         self.overlayController = overlayController
+
+        // Tear the monitor down entirely while disabled instead of filtering
+        // per-event — no wasted wakeups, and any visible overlay goes away.
+        settings.$enabled
+            .removeDuplicates()
+            .sink { [weak self] enabled in
+                if enabled {
+                    self?.start()
+                } else {
+                    self?.stop()
+                    self?.overlayController.hide()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     func start() {
-        guard scrollEventMonitor == nil else { return }
+        guard scrollEventMonitor == nil, settings.enabled else { return }
         scrollEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             self?.handleScroll(event)
         }
@@ -36,56 +51,64 @@ final class ScrollMonitor {
             self.scrollEventMonitor = nil
         }
         burstEndTimer?.invalidate()
-        resetBurst()
+        machine.reset()
+        clearBurst()
     }
 
     private func handleScroll(_ event: NSEvent) {
-        guard settings.enabled else { return }
-
-        if burstTarget == nil && !burstIgnored {
+        if !machine.burstActive {
             // Burst start: capture the target once, where the hand already is.
+            burstTarget = nil
+            burstIgnored = false
             if let target = TargetResolver.resolve(atCocoaPoint: NSEvent.mouseLocation),
                !settings.isIgnored(bundleIdentifier: target.bundleIdentifier) {
                 burstTarget = target
             } else {
-                // Track the burst so we don't re-resolve on every tick, but never show.
                 burstIgnored = true
             }
         }
 
-        accumulatedDelta += abs(event.scrollingDeltaY)
+        let gateOpen = burstTarget != nil && !burstIgnored && modifierSatisfied(event)
+        let output = machine.scrollEvent(
+            absDeltaY: abs(event.scrollingDeltaY),
+            gestureEnded: event.phase == .ended || event.phase == .cancelled,
+            momentumEnded: event.momentumPhase == .ended,
+            threshold: settings.scrollThreshold,
+            gateOpen: gateOpen
+        )
 
         if let target = burstTarget {
-            // Show as soon as the burst crosses the threshold — even mid-gesture.
-            // (The max(_, 1) keeps a zero threshold from firing on the delta-less
-            // touch events at gesture start.)
-            if !burstQualified, accumulatedDelta >= max(settings.scrollThreshold, 1) {
-                burstQualified = true
+            switch output.display {
+            case .show:
                 overlayController.show(for: target, at: NSEvent.mouseLocation)
-            } else if burstQualified {
-                // Continued scrolling keeps the overlay alive.
-                overlayController.extend()
+            case .extend:
+                // Also re-shows if a corridor-exit hid the overlay mid-burst
+                // (once the cooldown passes) — no dead zone on long scrolls.
+                overlayController.extendOrReshow(for: target)
+            case .none:
+                break
             }
         }
 
-        // The burst ends when the gesture or its momentum ends, or — for wheel
-        // mice, which carry no phase info — after a quiet period.
-        if event.phase == .ended || event.phase == .cancelled || event.momentumPhase == .ended {
+        if output.burstEnded {
             burstEndTimer?.invalidate()
-            resetBurst()
-            return
-        }
-
-        burstEndTimer?.invalidate()
-        burstEndTimer = Timer.scheduledTimer(withTimeInterval: burstEndInterval, repeats: false) { [weak self] _ in
-            self?.resetBurst()
+            clearBurst()
+        } else {
+            burstEndTimer?.invalidate()
+            burstEndTimer = Timer.scheduledTimer(withTimeInterval: burstEndInterval, repeats: false) { [weak self] _ in
+                self?.machine.quietTimeout()
+                self?.clearBurst()
+            }
         }
     }
 
-    private func resetBurst() {
+    private func modifierSatisfied(_ event: NSEvent) -> Bool {
+        guard let flag = settings.requiredModifier.flag else { return true }
+        return event.modifierFlags.contains(flag)
+    }
+
+    private func clearBurst() {
         burstTarget = nil
         burstIgnored = false
-        burstQualified = false
-        accumulatedDelta = 0
     }
 }

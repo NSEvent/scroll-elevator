@@ -7,13 +7,18 @@ SIGN_IDENTITY := Developer ID Application: Kevin Tang (542GXYT5Z2)
 PROJECT := ScrollElevator.xcodeproj
 PROJECT_YML := project.yml
 
+# Load version from version.env
+include version.env
+export MARKETING_VERSION
+export BUILD_NUMBER
+
 BUILD_SETTINGS = xcodebuild -showBuildSettings -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG)
 TARGET_BUILD_DIR := $(shell $(BUILD_SETTINGS) 2>/dev/null | awk -F ' = ' '/TARGET_BUILD_DIR/ {print $$2; exit}')
 WRAPPER_NAME := $(shell $(BUILD_SETTINGS) 2>/dev/null | awk -F ' = ' '/WRAPPER_NAME/ {print $$2; exit}')
 APP_PATH := $(TARGET_BUILD_DIR)/$(WRAPPER_NAME)
 PROCESS_NAME := $(basename $(WRAPPER_NAME))
 
-.PHONY: gen build install app-path clean
+.PHONY: gen build test install app-path clean
 
 gen:
 	xcodegen generate
@@ -21,7 +26,14 @@ gen:
 build:
 	@test -d $(PROJECT) || $(MAKE) gen
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration $(CONFIG) \
-		DEVELOPMENT_TEAM=$(TEAM_ID) -allowProvisioningUpdates build
+		DEVELOPMENT_TEAM=$(TEAM_ID) \
+		MARKETING_VERSION=$(MARKETING_VERSION) CURRENT_PROJECT_VERSION=$(BUILD_NUMBER) \
+		-allowProvisioningUpdates build
+
+test:
+	@test -d $(PROJECT) || $(MAKE) gen
+	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug \
+		-destination 'platform=macOS' DEVELOPMENT_TEAM=$(TEAM_ID) test
 
 install: build
 	-pkill -x "$(PROCESS_NAME)" || true

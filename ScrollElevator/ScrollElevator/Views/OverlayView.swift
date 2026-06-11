@@ -5,7 +5,11 @@ import SwiftUI
 struct OverlayView: View {
     let buttonDiameter: CGFloat
     let spacing: CGFloat
+    let idleOpacity: Double
+    let dimTop: Bool
+    let dimBottom: Bool
     let onJump: (JumpDirection) -> Void
+    let onPage: (JumpDirection) -> Void
     let onHoverChange: (Bool) -> Void
 
     var body: some View {
@@ -13,12 +17,26 @@ struct OverlayView: View {
         // the gap between the buttons when the overlay appears, and stack-wide
         // hover would permanently pause the hide timer.
         VStack(spacing: spacing) {
-            JumpButton(systemImage: "arrow.up.to.line", diameter: buttonDiameter, onHoverChange: onHoverChange) {
-                onJump(.top)
-            }
-            JumpButton(systemImage: "arrow.down.to.line", diameter: buttonDiameter, onHoverChange: onHoverChange) {
-                onJump(.bottom)
-            }
+            JumpButton(
+                systemImage: "arrow.up.to.line",
+                diameter: buttonDiameter,
+                idleOpacity: idleOpacity,
+                dimmed: dimTop,
+                helpText: "Jump to top — hold for page up",
+                onHoverChange: onHoverChange,
+                tapAction: { onJump(.top) },
+                holdAction: { onPage(.top) }
+            )
+            JumpButton(
+                systemImage: "arrow.down.to.line",
+                diameter: buttonDiameter,
+                idleOpacity: idleOpacity,
+                dimmed: dimBottom,
+                helpText: "Jump to bottom — hold for page down",
+                onHoverChange: onHoverChange,
+                tapAction: { onJump(.bottom) },
+                holdAction: { onPage(.bottom) }
+            )
         }
         .padding(12)
     }
@@ -27,33 +45,76 @@ struct OverlayView: View {
 private struct JumpButton: View {
     let systemImage: String
     let diameter: CGFloat
+    let idleOpacity: Double
+    let dimmed: Bool
+    let helpText: String
     let onHoverChange: (Bool) -> Void
-    let action: () -> Void
+    let tapAction: () -> Void
+    let holdAction: () -> Void
+
+    /// Press-and-hold this long fires the page action instead of the jump.
+    private let holdThreshold: TimeInterval = 0.35
 
     @State private var hovering = false
+    @State private var pressStartedAt: Date?
 
     var body: some View {
-        Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(.ultraThinMaterial)
-                Circle()
-                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-                Image(systemName: systemImage)
-                    .font(.system(size: diameter * 0.42, weight: .semibold))
-                    .foregroundStyle(.primary)
-            }
-            .frame(width: diameter, height: diameter)
-            // Unobtrusive at rest; solid once the pointer aims at it.
-            .opacity(hovering ? 1.0 : 0.3)
-            .scaleEffect(hovering ? 1.12 : 1.0)
+        JumpButtonVisual(systemImage: systemImage, diameter: diameter)
+            // Edge-aware: a button that can't do anything (already at the top/
+            // bottom) fades further back but stays clickable — content can move
+            // under a stale reading.
+            .opacity(currentOpacity)
+            .scaleEffect(pressStartedAt != nil ? 0.92 : (hovering ? 1.12 : 1.0))
             .shadow(color: .black.opacity(hovering ? 0.25 : 0), radius: hovering ? 6 : 0, y: 1)
             .animation(.easeOut(duration: 0.12), value: hovering)
+            .animation(.easeOut(duration: 0.08), value: pressStartedAt != nil)
+            .contentShape(Circle())
+            // A Button can't distinguish tap from hold, so track the press
+            // directly: quick release jumps, held release pages.
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        if pressStartedAt == nil { pressStartedAt = Date() }
+                    }
+                    .onEnded { _ in
+                        defer { pressStartedAt = nil }
+                        guard let start = pressStartedAt else { return }
+                        if Date().timeIntervalSince(start) >= holdThreshold {
+                            holdAction()
+                        } else {
+                            tapAction()
+                        }
+                    }
+            )
+            .onHover { value in
+                hovering = value
+                onHoverChange(value)
+            }
+            .help(helpText)
+    }
+
+    private var currentOpacity: Double {
+        if hovering { return dimmed ? 0.6 : 1.0 }
+        return idleOpacity * (dimmed ? 0.4 : 1.0)
+    }
+}
+
+/// The bare button appearance, shared with the settings preview and the
+/// onboarding mock so they always match the real overlay.
+struct JumpButtonVisual: View {
+    let systemImage: String
+    let diameter: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(.ultraThinMaterial)
+            Circle()
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+            Image(systemName: systemImage)
+                .font(.system(size: diameter * 0.42, weight: .semibold))
+                .foregroundStyle(.primary)
         }
-        .buttonStyle(.plain)
-        .onHover { value in
-            hovering = value
-            onHoverChange(value)
-        }
+        .frame(width: diameter, height: diameter)
     }
 }

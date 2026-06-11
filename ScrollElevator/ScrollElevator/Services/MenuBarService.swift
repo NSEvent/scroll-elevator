@@ -4,19 +4,39 @@ import Combine
 final class MenuBarService: NSObject, NSMenuDelegate {
     private let settings: SettingsService
     private let openSettings: () -> Void
+    private let openWelcome: () -> Void
     private var statusItem: NSStatusItem!
+    private var cancellables = Set<AnyCancellable>()
 
-    init(settings: SettingsService, openSettings: @escaping () -> Void) {
+    /// Last non-self frontmost app, for the "Ignore <App>" quick action.
+    /// (When the status menu opens, frontmost may briefly be us.)
+    private var lastExternalApp: NSRunningApplication?
+    private var workspaceObserver: NSObjectProtocol?
+
+    init(settings: SettingsService, openSettings: @escaping () -> Void, openWelcome: @escaping () -> Void) {
         self.settings = settings
         self.openSettings = openSettings
+        self.openWelcome = openWelcome
         super.init()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        if let button = statusItem.button {
-            button.image = NSImage(
-                systemSymbolName: "arrow.up.and.down.circle",
-                accessibilityDescription: "Scroll Elevator"
-            )
+        updateIcon(enabled: settings.enabled)
+
+        // Filled icon while active, outline while disabled.
+        settings.$enabled
+            .removeDuplicates()
+            .sink { [weak self] enabled in self?.updateIcon(enabled: enabled) }
+            .store(in: &cancellables)
+
+        lastExternalApp = NSWorkspace.shared.frontmostApplication
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+            self?.lastExternalApp = app
         }
 
         let menu = NSMenu()
@@ -24,7 +44,15 @@ final class MenuBarService: NSObject, NSMenuDelegate {
         statusItem.menu = menu
     }
 
-    // Rebuild on every open so the Enabled checkmark and Accessibility state are fresh.
+    private func updateIcon(enabled: Bool) {
+        statusItem.button?.image = NSImage(
+            systemSymbolName: enabled ? "arrow.up.and.down.circle.fill" : "arrow.up.and.down.circle",
+            accessibilityDescription: "Scroll Elevator"
+        )
+        statusItem.button?.appearsDisabled = !enabled
+    }
+
+    // Rebuild on every open so the checkmarks and Accessibility state are fresh.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
@@ -32,6 +60,19 @@ final class MenuBarService: NSObject, NSMenuDelegate {
         enabledItem.target = self
         enabledItem.state = settings.enabled ? .on : .off
         menu.addItem(enabledItem)
+
+        if let app = lastExternalApp, let bundleID = app.bundleIdentifier {
+            let name = app.localizedName ?? bundleID
+            let ignored = settings.isIgnored(bundleIdentifier: bundleID)
+            let ignoreItem = NSMenuItem(
+                title: ignored ? "Stop Ignoring \(name)" : "Ignore \(name)",
+                action: #selector(toggleIgnoreFrontmost(_:)),
+                keyEquivalent: ""
+            )
+            ignoreItem.target = self
+            ignoreItem.representedObject = bundleID
+            menu.addItem(ignoreItem)
+        }
 
         menu.addItem(.separator())
 
@@ -50,6 +91,10 @@ final class MenuBarService: NSObject, NSMenuDelegate {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        let welcomeItem = NSMenuItem(title: "Welcome Guide", action: #selector(showWelcome), keyEquivalent: "")
+        welcomeItem.target = self
+        menu.addItem(welcomeItem)
+
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(title: "Quit Scroll Elevator", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -60,11 +105,24 @@ final class MenuBarService: NSObject, NSMenuDelegate {
         settings.enabled.toggle()
     }
 
+    @objc private func toggleIgnoreFrontmost(_ sender: NSMenuItem) {
+        guard let bundleID = sender.representedObject as? String else { return }
+        if settings.isIgnored(bundleIdentifier: bundleID) {
+            settings.appRules.removeValue(forKey: bundleID)
+        } else {
+            settings.appRules[bundleID] = .ignore
+        }
+    }
+
     @objc private func grantAccessibility() {
         JumpDispatcher.promptForAccessibilityIfNeeded()
     }
 
     @objc private func showSettings() {
         openSettings()
+    }
+
+    @objc private func showWelcome() {
+        openWelcome()
     }
 }

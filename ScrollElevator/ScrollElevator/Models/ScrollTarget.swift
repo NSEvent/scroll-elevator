@@ -6,6 +6,9 @@ struct ScrollTarget {
     let pid: pid_t
     let bundleIdentifier: String?
     let appName: String
+    /// Cursor position at burst start (Cocoa global coordinates) — used to find
+    /// the Accessibility scroll area under the pointer.
+    let capturePoint: NSPoint
 
     var runningApplication: NSRunningApplication? {
         NSRunningApplication(processIdentifier: pid)

@@ -11,7 +11,8 @@ enum TargetResolver {
             return ScrollTarget(
                 pid: pid,
                 bundleIdentifier: app?.bundleIdentifier,
-                appName: app?.localizedName ?? "Unknown"
+                appName: app?.localizedName ?? "Unknown",
+                capturePoint: point
             )
         }
 
@@ -21,7 +22,8 @@ enum TargetResolver {
         return ScrollTarget(
             pid: front.processIdentifier,
             bundleIdentifier: front.bundleIdentifier,
-            appName: front.localizedName ?? "Unknown"
+            appName: front.localizedName ?? "Unknown",
+            capturePoint: point
         )
     }
 

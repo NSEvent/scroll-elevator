@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Owns the non-activating overlay panel: placement around the cursor anchor,
-/// fade in/out, the hide timeout, and all dismissal triggers.
+/// the optional hide timeout, and all dismissal triggers.
 final class OverlayController {
     private let settings: SettingsService
 
@@ -59,10 +59,10 @@ final class OverlayController {
         target = newTarget
         anchor = anchorPoint
 
-        let panel = makePanel()
+        let panel = makePanel(for: newTarget)
         self.panel = panel
         panel.setFrameOrigin(panelOrigin(for: anchor, panelSize: panel.frame.size))
-        // No entrance animation — the fade-in read as a flash. The buttons are
+        // No entrance animation — a fade-in reads as a flash. The buttons are
         // translucent at rest, so an instant appearance is already gentle.
         panel.alphaValue = 1
         panel.orderFrontRegardless()
@@ -71,11 +71,15 @@ final class OverlayController {
         restartHideTimer()
     }
 
-    /// Keep a visible overlay alive while scrolling continues, without the
-    /// target/anchor bookkeeping of a full show().
-    func extend() {
-        guard let panel, panel.isVisible else { return }
-        restartHideTimer()
+    /// Keep a visible overlay alive while scrolling continues; if a corridor
+    /// exit hid it mid-burst, bring it back at the current cursor position
+    /// (the cooldown still applies, so this can't flicker).
+    func extendOrReshow(for target: ScrollTarget) {
+        if let panel, panel.isVisible {
+            restartHideTimer()
+        } else {
+            show(for: target, at: NSEvent.mouseLocation)
+        }
     }
 
     func hide(animated: Bool = true) {
@@ -102,7 +106,7 @@ final class OverlayController {
 
     // MARK: - Panel construction
 
-    private func makePanel() -> NSPanel {
+    private func makePanel(for target: ScrollTarget) -> NSPanel {
         let distance = CGFloat(settings.placementDistance)
         // Two buttons whose centers sit `distance` above and below the anchor.
         let spacing = max(2 * distance - buttonDiameter, 8)
@@ -111,7 +115,7 @@ final class OverlayController {
             height: buttonDiameter * 2 + spacing + panelPadding * 2
         )
 
-        let panel = NSPanel(
+        let panel = OverlayPanel(
             contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -126,15 +130,40 @@ final class OverlayController {
         panel.isMovableByWindowBackground = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
+        panel.onDeadClick = { [weak self] in self?.hide() }
+
+        // Edge awareness: dim the button that can't do anything. Only known
+        // when the target exposes an AX scrollbar; nil means "don't dim".
+        let position = JumpDispatcher.isTrusted
+            ? AXScrollJumper.scrollPosition(atCocoaPoint: target.capturePoint)
+            : nil
 
         let view = OverlayView(
             buttonDiameter: buttonDiameter,
             spacing: spacing,
+            idleOpacity: settings.idleOpacity,
+            dimTop: position.map { $0 <= 0.001 } ?? false,
+            dimBottom: position.map { $0 >= 0.999 } ?? false,
             onJump: { [weak self] direction in self?.performJump(direction) },
+            onPage: { [weak self] direction in self?.performPage(direction) },
             onHoverChange: { [weak self] hovering in self?.hoverChanged(hovering) }
         )
         let hosting = FirstMouseHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: contentSize)
+        // Only the two button circles are clickable; the gap between them —
+        // where the cursor parks — stays click-through.
+        let padding = panelPadding
+        let diameter = buttonDiameter
+        hosting.interactiveRegion = { point, bounds in
+            let radius = diameter / 2 + 2
+            let centerX = bounds.width / 2
+            let edgeOffset = padding + diameter / 2
+            // The two buttons are symmetric about the vertical center, so this
+            // check is independent of view flippedness.
+            let toNear = hypot(point.x - centerX, point.y - edgeOffset)
+            let toFar = hypot(point.x - centerX, (bounds.height - point.y) - edgeOffset)
+            return min(toNear, toFar) <= radius
+        }
         panel.contentView = hosting
         return panel
     }
@@ -157,8 +186,15 @@ final class OverlayController {
 
     private func performJump(_ direction: JumpDirection) {
         guard let target else { return }
-        JumpDispatcher.jump(direction, target: target)
+        JumpDispatcher.jump(direction, target: target, rule: settings.rule(for: target.bundleIdentifier))
         hide()
+    }
+
+    /// Long-press page-step: the overlay stays up so the user can keep paging.
+    private func performPage(_ direction: JumpDirection) {
+        guard let target else { return }
+        JumpDispatcher.page(direction, target: target)
+        restartHideTimer()
     }
 
     private func hoverChanged(_ hovering: Bool) {
@@ -225,8 +261,35 @@ final class OverlayController {
     }
 }
 
+/// Safety net behind the hit-test guard: if a click somehow lands on the panel
+/// without hitting a button, dismiss instead of silently swallowing it.
+private final class OverlayPanel: NSPanel {
+    var onDeadClick: (() -> Void)?
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown,
+           let contentView,
+           contentView.hitTest(event.locationInWindow) == nil {
+            onDeadClick?()
+            return
+        }
+        super.sendEvent(event)
+    }
+}
+
 /// Buttons in a non-activating panel must accept the first click without the
-/// panel ever becoming key.
+/// panel ever becoming key — and only the button circles are interactive.
 final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    /// Returns whether a point (in this view's coordinates) is clickable.
+    var interactiveRegion: ((NSPoint, NSRect) -> Bool)?
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = superview.map { convert(point, from: $0) } ?? point
+        if let interactiveRegion, !interactiveRegion(local, bounds) {
+            return nil
+        }
+        return super.hitTest(point)
+    }
 }
