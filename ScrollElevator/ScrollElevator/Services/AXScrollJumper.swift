@@ -25,9 +25,41 @@ enum AXScrollJumper {
         return number.doubleValue
     }
 
+    /// Height in points of the scroll area under `point` — used to size a
+    /// "page" for the long-press page action.
+    static func scrollAreaHeight(atCocoaPoint point: NSPoint) -> CGFloat? {
+        guard let area = climb(fromCocoaPoint: point, until: { element in
+            role(of: element) == kAXScrollAreaRole as String
+        }) else { return nil }
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(area, kAXSizeAttribute as CFString, &ref) == .success,
+              let ref, CFGetTypeID(ref) == AXValueGetTypeID() else { return nil }
+        var size = CGSize.zero
+        guard AXValueGetValue((ref as! AXValue), .cgSize, &size) else { return nil }
+        return size.height
+    }
+
     // MARK: - Element lookup
 
     private static func verticalScrollBar(atCocoaPoint point: NSPoint) -> AXUIElement? {
+        // Climb to the nearest enclosing scroll area that exposes a vertical
+        // scrollbar. Nested scroll views resolve to the innermost one — which
+        // is the one the user was actually scrolling.
+        var bar: AXUIElement?
+        _ = climb(fromCocoaPoint: point, until: { element in
+            guard role(of: element) == kAXScrollAreaRole as String else { return false }
+            bar = elementAttribute(element, kAXVerticalScrollBarAttribute as CFString)
+            return bar != nil
+        })
+        return bar
+    }
+
+    /// Walk up the AX ancestry from the element under `point` until the
+    /// predicate matches; returns the matching element.
+    private static func climb(
+        fromCocoaPoint point: NSPoint,
+        until predicate: (AXUIElement) -> Bool
+    ) -> AXUIElement? {
         guard let primary = NSScreen.screens.first else { return nil }
         // AX positions use top-left-origin global coordinates.
         let cgPoint = CGPoint(x: point.x, y: primary.frame.maxY - point.y)
@@ -38,14 +70,8 @@ enum AXScrollJumper {
             systemWide, Float(cgPoint.x), Float(cgPoint.y), &elementRef
         ) == .success, var element = elementRef else { return nil }
 
-        // Climb to the nearest enclosing scroll area that exposes a vertical
-        // scrollbar. Nested scroll views resolve to the innermost one — which
-        // is the one the user was actually scrolling.
         for _ in 0..<24 {
-            if role(of: element) == kAXScrollAreaRole as String,
-               let bar = elementAttribute(element, kAXVerticalScrollBarAttribute as CFString) {
-                return bar
-            }
+            if predicate(element) { return element }
             guard let parent = elementAttribute(element, kAXParentAttribute as CFString) else {
                 return nil
             }

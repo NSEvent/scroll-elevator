@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1 — 2026-06-11
+
+### Fixed
+- Long-press paging now sends a synthetic scroll-wheel event to the view under
+  the pointer instead of PageUp/PageDown keystrokes. Paging keys are
+  interpreted inconsistently per app (terminals snap scrollback to the prompt
+  on any keystroke; chat apps rebind them); a wheel event pages anything
+  scrollable. Page size derives from the AX scroll area's height.
+- Home/End key chords now carry the function-key modifier flag, matching real
+  hardware events.
+
 ## 0.2.0 — 2026-06-11
 
 ### Added
