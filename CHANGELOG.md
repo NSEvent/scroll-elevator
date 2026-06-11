@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 — 2026-06-11
+
+### Added
+- Hold to cruise: press and hold a button and the page scrolls continuously
+  in that direction, accelerating gently (500 → 2500 pt/s), until you release.
+  Quick presses still jump. Synthetic pixel-scroll events route to the window
+  beneath the overlay, so cruising works in anything scrollable; a global
+  mouse-up backstop and a 20 s hard cap make a lost release harmless.
+
 ## 0.2.2 — 2026-06-11
 
 ### Removed

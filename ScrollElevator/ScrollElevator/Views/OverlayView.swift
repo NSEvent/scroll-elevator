@@ -8,7 +8,9 @@ struct OverlayView: View {
     let idleOpacity: Double
     let dimTop: Bool
     let dimBottom: Bool
-    let onJump: (JumpDirection) -> Void
+    /// Reports raw press state; the controller decides jump (quick release)
+    /// vs cruise (hold).
+    let onPress: (JumpDirection, Bool) -> Void
     let onHoverChange: (Bool) -> Void
 
     var body: some View {
@@ -21,18 +23,18 @@ struct OverlayView: View {
                 diameter: buttonDiameter,
                 idleOpacity: idleOpacity,
                 dimmed: dimTop,
-                helpText: "Jump to top",
+                helpText: "Jump to top — hold to cruise",
                 onHoverChange: onHoverChange,
-                action: { onJump(.top) }
+                onPress: { pressed in onPress(.top, pressed) }
             )
             JumpButton(
                 systemImage: "arrow.down.to.line",
                 diameter: buttonDiameter,
                 idleOpacity: idleOpacity,
                 dimmed: dimBottom,
-                helpText: "Jump to bottom",
+                helpText: "Jump to bottom — hold to cruise",
                 onHoverChange: onHoverChange,
-                action: { onJump(.bottom) }
+                onPress: { pressed in onPress(.bottom, pressed) }
             )
         }
         .padding(12)
@@ -46,27 +48,40 @@ private struct JumpButton: View {
     let dimmed: Bool
     let helpText: String
     let onHoverChange: (Bool) -> Void
-    let action: () -> Void
+    let onPress: (Bool) -> Void
 
     @State private var hovering = false
+    @State private var pressed = false
 
     var body: some View {
-        Button(action: action) {
-            JumpButtonVisual(systemImage: systemImage, diameter: diameter)
-                // Edge-aware: a button that can't do anything (already at the
-                // top/bottom) fades further back but stays clickable — content
-                // can move under a stale reading.
-                .opacity(currentOpacity)
-                .scaleEffect(hovering ? 1.12 : 1.0)
-                .shadow(color: .black.opacity(hovering ? 0.25 : 0), radius: hovering ? 6 : 0, y: 1)
-                .animation(.easeOut(duration: 0.12), value: hovering)
-        }
-        .buttonStyle(.plain)
-        .onHover { value in
-            hovering = value
-            onHoverChange(value)
-        }
-        .help(helpText)
+        JumpButtonVisual(systemImage: systemImage, diameter: diameter)
+            // Edge-aware: a button that can't do anything (already at the
+            // top/bottom) fades further back but stays clickable — content
+            // can move under a stale reading.
+            .opacity(currentOpacity)
+            .scaleEffect(pressed ? 0.92 : (hovering ? 1.12 : 1.0))
+            .shadow(color: .black.opacity(hovering ? 0.25 : 0), radius: hovering ? 6 : 0, y: 1)
+            .animation(.easeOut(duration: 0.12), value: hovering)
+            .animation(.easeOut(duration: 0.08), value: pressed)
+            .contentShape(Circle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        if !pressed {
+                            pressed = true
+                            onPress(true)
+                        }
+                    }
+                    .onEnded { _ in
+                        pressed = false
+                        onPress(false)
+                    }
+            )
+            .onHover { value in
+                hovering = value
+                onHoverChange(value)
+            }
+            .help(helpText)
     }
 
     private var currentOpacity: Double {

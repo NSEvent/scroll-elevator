@@ -34,7 +34,7 @@ struct OnboardingView: View {
                 )
                 OnboardingBullet(
                     symbol: "arrow.up.to.line",
-                    text: "Click to jump the scrolled window to its top or bottom."
+                    text: "Click to jump the scrolled window to its top or bottom. Hold to cruise — the page glides while you hold."
                 )
                 OnboardingBullet(
                     symbol: "cursorarrow.motionlines",

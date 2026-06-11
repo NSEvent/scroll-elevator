@@ -83,6 +83,10 @@ final class OverlayController {
     }
 
     func hide(animated: Bool = true) {
+        stopCruise()
+        cruiseStartTimer?.invalidate()
+        cruiseStartTimer = nil
+        pressStartedAt = nil
         hideTimer?.invalidate()
         hideTimer = nil
         removeDismissMonitors()
@@ -144,7 +148,7 @@ final class OverlayController {
             idleOpacity: settings.idleOpacity,
             dimTop: position.map { $0 <= 0.001 } ?? false,
             dimBottom: position.map { $0 >= 0.999 } ?? false,
-            onJump: { [weak self] direction in self?.performJump(direction) },
+            onPress: { [weak self] direction, pressed in self?.pressChanged(direction, pressed: pressed) },
             onHoverChange: { [weak self] hovering in self?.hoverChanged(hovering) }
         )
         let hosting = FirstMouseHostingView(rootView: view)
@@ -183,10 +187,93 @@ final class OverlayController {
 
     // MARK: - Actions
 
+    /// Quick press = jump; hold past `cruiseDelay` = cruise while held.
+    private var pressStartedAt: Date?
+    private var cruiseStartTimer: Timer?
+    private var cruiseTimer: Timer?
+    private var cruiseBeganAt: Date?
+    private var cruising = false
+    private var cruiseStopMonitor: Any?
+
+    private let cruiseDelay: TimeInterval = 0.35
+    /// Cruise speed ramp, in points/second.
+    private let cruiseBaseSpeed: Double = 500
+    private let cruiseAcceleration: Double = 700  // per second of hold
+    private let cruiseMaxSpeed: Double = 2500
+    private let cruiseTickHz: Double = 60
+    /// Hard cap — a lost mouse-up can never scroll forever.
+    private let cruiseMaxDuration: TimeInterval = 20
+
+    private func pressChanged(_ direction: JumpDirection, pressed: Bool) {
+        if pressed {
+            pressStartedAt = Date()
+            cruiseStartTimer?.invalidate()
+            cruiseStartTimer = Timer.scheduledTimer(withTimeInterval: cruiseDelay, repeats: false) { [weak self] _ in
+                self?.startCruise(direction)
+            }
+        } else {
+            cruiseStartTimer?.invalidate()
+            cruiseStartTimer = nil
+            if cruising {
+                stopCruise()
+            } else {
+                performJump(direction)
+            }
+            pressStartedAt = nil
+        }
+    }
+
     private func performJump(_ direction: JumpDirection) {
         guard let target else { return }
         JumpDispatcher.jump(direction, target: target, rule: settings.rule(for: target.bundleIdentifier))
         hide()
+    }
+
+    // MARK: - Cruise
+
+    private func startCruise(_ direction: JumpDirection) {
+        guard !cruising, let panel else { return }
+        cruising = true
+        cruiseBeganAt = Date()
+        // Synthetic wheel events route by cursor position; make the panel
+        // transparent to them so they reach the target window beneath. The
+        // active press keeps delivering its mouse-up to us regardless.
+        panel.ignoresMouseEvents = true
+
+        cruiseTimer = Timer.scheduledTimer(withTimeInterval: 1 / cruiseTickHz, repeats: true) { [weak self] _ in
+            self?.cruiseTick(direction)
+        }
+
+        // Backstop: if the mouse-up is ever misrouted past our gesture, the
+        // global monitor (which sees other apps' events) still ends the cruise.
+        cruiseStopMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp, handler: { [weak self] _ in
+            self?.stopCruise()
+        })
+    }
+
+    private func cruiseTick(_ direction: JumpDirection) {
+        guard cruising, let beganAt = cruiseBeganAt else { return }
+        let elapsed = Date().timeIntervalSince(beganAt)
+        guard elapsed < cruiseMaxDuration else {
+            stopCruise()
+            return
+        }
+        let speed = min(cruiseMaxSpeed, cruiseBaseSpeed + cruiseAcceleration * elapsed)
+        JumpDispatcher.cruiseTick(direction, pixels: Int32((speed / cruiseTickHz).rounded()))
+    }
+
+    private func stopCruise() {
+        guard cruising else { return }
+        cruising = false
+        cruiseBeganAt = nil
+        cruiseTimer?.invalidate()
+        cruiseTimer = nil
+        if let cruiseStopMonitor {
+            NSEvent.removeMonitor(cruiseStopMonitor)
+            self.cruiseStopMonitor = nil
+        }
+        panel?.ignoresMouseEvents = false
+        restartHideTimer()
     }
 
     private func hoverChanged(_ hovering: Bool) {
@@ -202,7 +289,7 @@ final class OverlayController {
     private func restartHideTimer() {
         hideTimer?.invalidate()
         hideTimer = nil
-        guard !settings.neverHide, !isHovering else { return }
+        guard !settings.neverHide, !isHovering, !cruising else { return }
         hideTimer = Timer.scheduledTimer(withTimeInterval: settings.hideTimeout, repeats: false) { [weak self] _ in
             self?.hide()
         }

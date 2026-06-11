@@ -3,7 +3,8 @@
 A tiny macOS menu-bar utility: when you scroll, two translucent elevator
 buttons appear right where your hand already is — jump to top above the
 cursor, jump to bottom below it. Click one and the scrolled app leaps to its
-beginning or end. Move the mouse away and they vanish.
+beginning or end; hold one and the page cruises in that direction until you
+let go. Move the mouse away and they vanish.
 
 ## How it works
 
@@ -25,6 +26,10 @@ beginning or end. Move the mouse away and they vanish.
   else gets ⌘↑/⌘↓. Per-app rules are editable in Settings → Apps.
 - **Edge awareness:** when the scroll position is readable, the button that
   can't do anything (already at top/bottom) dims further.
+- **Hold to cruise:** press and hold a button (≥0.35 s) and the page scrolls
+  continuously in that direction — accelerating gently up to a cap — until you
+  release. Implemented as synthetic pixel-scroll events to the window beneath,
+  so it works in anything scrollable.
 - By default the overlay never hides on its own — corridor exit, button click,
   outside click, or app switch dismiss it. An optional hide-after timeout can
   be enabled in Settings.

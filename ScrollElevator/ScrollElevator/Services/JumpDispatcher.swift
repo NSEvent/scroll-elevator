@@ -60,6 +60,28 @@ enum JumpDispatcher {
         }
     }
 
+    /// Marks our synthetic cruise-scroll events so the scroll monitor ignores them.
+    static let syntheticScrollUserData: Int64 = 0x53_45_4C_56  // "SELV"
+
+    /// One cruise tick: a synthetic pixel-scroll at the current cursor position.
+    /// The overlay panel must be ignoring mouse events so the wheel routes to
+    /// the target window beneath it.
+    static func cruiseTick(_ direction: JumpDirection, pixels: Int32) {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        guard let event = CGEvent(
+            scrollWheelEvent2Source: source,
+            units: .pixel,
+            wheelCount: 1,
+            // Positive wheel delta scrolls toward the top (same sign convention
+            // as scrollingDeltaY).
+            wheel1: direction == .top ? pixels : -pixels,
+            wheel2: 0,
+            wheel3: 0
+        ) else { return }
+        event.setIntegerValueField(.eventSourceUserData, value: syntheticScrollUserData)
+        event.post(tap: .cghidEventTap)
+    }
+
     private static func defaultChord(for bundleIdentifier: String?, direction: JumpDirection) -> KeyChord {
         if let bundleIdentifier {
             if homeEndApps.contains(bundleIdentifier) {
