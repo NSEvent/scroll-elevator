@@ -43,8 +43,7 @@ final class ScrollMonitor {
 
         if burstTarget == nil && !burstIgnored {
             // Burst start: capture the target once, where the hand already is.
-            let anchor = NSEvent.mouseLocation
-            if let target = TargetResolver.resolve(atCocoaPoint: anchor),
+            if let target = TargetResolver.resolve(atCocoaPoint: NSEvent.mouseLocation),
                !settings.isIgnored(bundleIdentifier: target.bundleIdentifier) {
                 burstTarget = target
             } else {
@@ -54,7 +53,32 @@ final class ScrollMonitor {
         }
 
         accumulatedDelta += abs(event.scrollingDeltaY)
+        let qualified = accumulatedDelta >= settings.scrollThreshold
 
+        // Trackpad inertia: fingers are already up, the pointer is stationary.
+        // Show the moment the glide crosses the threshold rather than waiting
+        // for momentum to fully decay.
+        if event.momentumPhase != [] {
+            if qualified {
+                burstEndTimer?.invalidate()
+                burstDidEnd()
+            } else if event.momentumPhase == .ended {
+                burstEndTimer?.invalidate()
+                resetBurst()
+            }
+            return
+        }
+
+        // Trackpad fingers lifted: end the burst now if it qualified; otherwise
+        // give momentum a chance to qualify it via the quiet-period timer.
+        if event.phase == .ended || event.phase == .cancelled, qualified {
+            burstEndTimer?.invalidate()
+            burstDidEnd()
+            return
+        }
+
+        // Wheel mice and line scrolls carry no phase info: fall back to
+        // quiet-period burst detection.
         burstEndTimer?.invalidate()
         burstEndTimer = Timer.scheduledTimer(withTimeInterval: burstEndInterval, repeats: false) { [weak self] _ in
             self?.burstDidEnd()
@@ -65,7 +89,8 @@ final class ScrollMonitor {
         defer { resetBurst() }
         guard let target = burstTarget,
               accumulatedDelta >= settings.scrollThreshold else { return }
-        overlayController.show(for: target)
+        // Anchor where the cursor is *now* — it is stationary at show time.
+        overlayController.show(for: target, at: NSEvent.mouseLocation)
     }
 
     private func resetBurst() {

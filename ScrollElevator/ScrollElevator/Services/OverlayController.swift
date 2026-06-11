@@ -19,25 +19,29 @@ final class OverlayController {
 
     /// Minimum quiet time after a hide before the overlay may reappear.
     private let cooldown: TimeInterval = 0.75
-    /// Pointer travel from the anchor that dismisses the overlay.
-    private let dismissDistance: CGFloat = 160
     /// A new burst anchored at least this far away repositions a visible overlay.
-    private let repositionDistance: CGFloat = 80
+    private let repositionDistance: CGFloat = 40
 
     private let buttonDiameter: CGFloat = 38
     private let panelPadding: CGFloat = 12
+
+    /// The overlay lives inside a small circle around the anchor — just big
+    /// enough to reach both buttons. Pointer travel beyond it hides the overlay.
+    private var dismissRadius: CGFloat {
+        CGFloat(settings.placementDistance) + buttonDiameter / 2 + 16
+    }
 
     init(settings: SettingsService) {
         self.settings = settings
     }
 
-    func show(for newTarget: ScrollTarget) {
+    func show(for newTarget: ScrollTarget, at anchorPoint: NSPoint) {
         if let panel, panel.isVisible {
             // Already up: adopt the new target, keep the anchor stable unless the
             // user has clearly moved, and just extend the timeout (no re-animation).
             target = newTarget
-            if hypot(newTarget.anchor.x - anchor.x, newTarget.anchor.y - anchor.y) > repositionDistance {
-                anchor = newTarget.anchor
+            if hypot(anchorPoint.x - anchor.x, anchorPoint.y - anchor.y) > repositionDistance {
+                anchor = anchorPoint
                 panel.setFrameOrigin(panelOrigin(for: anchor, panelSize: panel.frame.size))
             }
             restartHideTimer()
@@ -47,7 +51,7 @@ final class OverlayController {
         guard Date().timeIntervalSince(lastHideAt) >= cooldown else { return }
 
         target = newTarget
-        anchor = newTarget.anchor
+        anchor = anchorPoint
 
         let panel = makePanel()
         self.panel = panel
@@ -169,11 +173,11 @@ final class OverlayController {
     private func installDismissMonitors() {
         removeDismissMonitors()
 
-        // Pointer wandered well away from the anchor → the user moved on.
+        // Pointer left the small circle that contains the buttons → hide.
         let moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged], handler: { [weak self] _ in
             guard let self else { return }
             let location = NSEvent.mouseLocation
-            if hypot(location.x - self.anchor.x, location.y - self.anchor.y) > self.dismissDistance {
+            if hypot(location.x - self.anchor.x, location.y - self.anchor.y) > self.dismissRadius {
                 self.hide()
             }
         })

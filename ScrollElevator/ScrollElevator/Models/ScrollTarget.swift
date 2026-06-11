@@ -6,8 +6,6 @@ struct ScrollTarget {
     let pid: pid_t
     let bundleIdentifier: String?
     let appName: String
-    /// Cursor position at burst start, in Cocoa global coordinates (bottom-left origin).
-    let anchor: NSPoint
 
     var runningApplication: NSRunningApplication? {
         NSRunningApplication(processIdentifier: pid)

@@ -7,16 +7,20 @@ end. Ignore them and they fade away.
 
 ## How it works
 
-- A global `scrollWheel` monitor groups scroll events into bursts. When a burst
-  ends (≈180 ms of quiet) and crossed the scroll threshold, the overlay appears
-  anchored at the cursor position from the burst start — never on the first tick.
+- A global `scrollWheel` monitor groups scroll events into bursts. The overlay
+  appears as soon as a burst crosses the scroll threshold and the fingers lift
+  (or mid-glide once trackpad momentum crosses the threshold) — never on the
+  first tick. Wheel mice fall back to quiet-period detection.
+- It anchors at the cursor position at show time, when the pointer is
+  stationary, and only lives inside a small circle just big enough to reach
+  both buttons. Move the pointer outside that circle and it hides immediately.
 - The overlay is a non-activating borderless `NSPanel`, so clicking a button
   never steals focus from what you were scrolling.
 - The window under the cursor is captured at burst start (scroll-follows-mouse
   means it isn't necessarily the frontmost window). Button clicks post
   `Cmd-↑` / `Cmd-↓` to that app's PID, activating it first if needed.
-- The overlay hides on timeout, button click, any other click, key press,
-  app switch, or when the pointer wanders well away from the anchor.
+- The overlay also hides on timeout, button click, any other click, key press,
+  or app switch.
 
 ## Permissions
 
