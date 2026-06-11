@@ -42,9 +42,9 @@ private struct JumpButton: View {
             }
             .frame(width: diameter, height: diameter)
             // Unobtrusive at rest; solid once the pointer aims at it.
-            .opacity(hovering ? 1.0 : 0.55)
+            .opacity(hovering ? 1.0 : 0.35)
             .scaleEffect(hovering ? 1.12 : 1.0)
-            .shadow(color: .black.opacity(hovering ? 0.25 : 0.1), radius: hovering ? 6 : 2, y: 1)
+            .shadow(color: .black.opacity(hovering ? 0.25 : 0.06), radius: hovering ? 6 : 2, y: 1)
             .animation(.easeOut(duration: 0.12), value: hovering)
         }
         .buttonStyle(.plain)
