@@ -8,9 +8,9 @@ end. Ignore them and they fade away.
 ## How it works
 
 - A global `scrollWheel` monitor groups scroll events into bursts. The overlay
-  appears as soon as a burst crosses the scroll threshold and the fingers lift
-  (or mid-glide once trackpad momentum crosses the threshold) — never on the
-  first tick. Wheel mice fall back to quiet-period detection.
+  appears the moment a burst crosses the scroll threshold (default 10 pt) —
+  mid-gesture, essentially as soon as you begin to scroll. Continued scrolling
+  keeps it alive; the burst resets when the gesture or its momentum ends.
 - It anchors at the cursor position at show time, when the pointer is
   stationary, and only lives inside a tall, narrow corridor: tight left/right
   (a bit wider than the buttons), roomier up/down (a bit past the buttons).
@@ -36,7 +36,7 @@ Menu bar → Settings…
 - Enable/disable
 - Hide timeout (1–6 s)
 - Button distance from cursor (30–80 pt, default 56)
-- Scroll threshold before the overlay shows (20–200 pt)
+- Scroll threshold before the overlay shows (0–200 pt, default 10)
 - Ignored apps (games, remote desktops, design canvases…)
 
 ## Build

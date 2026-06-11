@@ -40,7 +40,7 @@ final class SettingsService: ObservableObject {
             Key.enabled: true,
             Key.hideTimeout: 2.5,
             Key.placementDistance: 56.0,
-            Key.scrollThreshold: 60.0,
+            Key.scrollThreshold: 10.0,
             Key.ignoredBundleIDs: [String](),
         ])
         enabled = defaults.bool(forKey: Key.enabled)

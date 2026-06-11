@@ -12,6 +12,7 @@ final class ScrollMonitor {
     // Active-burst state
     private var burstTarget: ScrollTarget?
     private var burstIgnored = false
+    private var burstQualified = false
     private var accumulatedDelta: CGFloat = 0
 
     /// Quiet period after the last scroll event that ends a burst.
@@ -53,49 +54,38 @@ final class ScrollMonitor {
         }
 
         accumulatedDelta += abs(event.scrollingDeltaY)
-        let qualified = accumulatedDelta >= settings.scrollThreshold
 
-        // Trackpad inertia: fingers are already up, the pointer is stationary.
-        // Show the moment the glide crosses the threshold rather than waiting
-        // for momentum to fully decay.
-        if event.momentumPhase != [] {
-            if qualified {
-                burstEndTimer?.invalidate()
-                burstDidEnd()
-            } else if event.momentumPhase == .ended {
-                burstEndTimer?.invalidate()
-                resetBurst()
+        if let target = burstTarget {
+            // Show as soon as the burst crosses the threshold — even mid-gesture.
+            // (The max(_, 1) keeps a zero threshold from firing on the delta-less
+            // touch events at gesture start.)
+            if !burstQualified, accumulatedDelta >= max(settings.scrollThreshold, 1) {
+                burstQualified = true
+                overlayController.show(for: target, at: NSEvent.mouseLocation)
+            } else if burstQualified {
+                // Continued scrolling keeps the overlay alive.
+                overlayController.extend()
             }
-            return
         }
 
-        // Trackpad fingers lifted: end the burst now if it qualified; otherwise
-        // give momentum a chance to qualify it via the quiet-period timer.
-        if event.phase == .ended || event.phase == .cancelled, qualified {
+        // The burst ends when the gesture or its momentum ends, or — for wheel
+        // mice, which carry no phase info — after a quiet period.
+        if event.phase == .ended || event.phase == .cancelled || event.momentumPhase == .ended {
             burstEndTimer?.invalidate()
-            burstDidEnd()
+            resetBurst()
             return
         }
 
-        // Wheel mice and line scrolls carry no phase info: fall back to
-        // quiet-period burst detection.
         burstEndTimer?.invalidate()
         burstEndTimer = Timer.scheduledTimer(withTimeInterval: burstEndInterval, repeats: false) { [weak self] _ in
-            self?.burstDidEnd()
+            self?.resetBurst()
         }
-    }
-
-    private func burstDidEnd() {
-        defer { resetBurst() }
-        guard let target = burstTarget,
-              accumulatedDelta >= settings.scrollThreshold else { return }
-        // Anchor where the cursor is *now* — it is stationary at show time.
-        overlayController.show(for: target, at: NSEvent.mouseLocation)
     }
 
     private func resetBurst() {
         burstTarget = nil
         burstIgnored = false
+        burstQualified = false
         accumulatedDelta = 0
     }
 }

@@ -71,6 +71,13 @@ final class OverlayController {
         restartHideTimer()
     }
 
+    /// Keep a visible overlay alive while scrolling continues, without the
+    /// target/anchor bookkeeping of a full show().
+    func extend() {
+        guard let panel, panel.isVisible else { return }
+        restartHideTimer()
+    }
+
     func hide(animated: Bool = true) {
         hideTimer?.invalidate()
         hideTimer = nil

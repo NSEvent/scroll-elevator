@@ -26,7 +26,7 @@ struct SettingsView: View {
                 LabeledSlider(
                     label: "Scroll threshold",
                     value: $settings.scrollThreshold,
-                    range: 20...200,
+                    range: 0...200,
                     format: { String(format: "%.0f pt", $0) }
                 )
             }
