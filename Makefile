@@ -35,12 +35,19 @@ test:
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug \
 		-destination 'platform=macOS' DEVELOPMENT_TEAM=$(TEAM_ID) test
 
+# Clean-replace before ditto (ditto MERGES into an existing bundle — stale
+# files from previous builds break the signature seal and reset TCC grants),
+# then sign the exact bundle that runs, in place, with the stable Developer ID
+# identity so the Accessibility grant persists across installs.
 install: build
 	-pkill -x "$(PROCESS_NAME)" || true
 	sleep 1
-	codesign --force --sign "$(SIGN_IDENTITY)" --options runtime --timestamp=none \
-		--entitlements ScrollElevator/ScrollElevator/Resources/ScrollElevator.entitlements "$(APP_PATH)"
+	rm -rf "/Applications/$(WRAPPER_NAME)"
 	/usr/bin/ditto "$(APP_PATH)" "/Applications/$(WRAPPER_NAME)"
+	codesign --force --sign "$(SIGN_IDENTITY)" --options runtime --timestamp=none \
+		--entitlements ScrollElevator/ScrollElevator/Resources/ScrollElevator.entitlements \
+		"/Applications/$(WRAPPER_NAME)"
+	codesign --verify --strict "/Applications/$(WRAPPER_NAME)"
 	open "/Applications/$(WRAPPER_NAME)"
 
 app-path:

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2 - 2026-06-11
+
+### Fixed
+- Hold-to-cruise actually cruises now. The hold and cruise timers were
+  scheduled in the default run-loop mode, which never fires while the mouse
+  button is held down (event-tracking mode) - exactly when cruising happens.
+  All overlay timers now run in .common modes.
+- make install clean-replaces the /Applications bundle (ditto merges into an
+  existing bundle, and stale files break the signature seal, resetting the
+  Accessibility grant) and signs in place after the copy, with a strict verify.
+
 ## 0.3.1 — 2026-06-11
 
 ### Fixed

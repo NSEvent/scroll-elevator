@@ -41,6 +41,15 @@ final class OverlayController {
         self.settings = settings
     }
 
+    /// All overlay timers must run in .common modes: while the user holds a
+    /// button, the run loop is in event-tracking mode and .default-mode timers
+    /// (Timer.scheduledTimer) never fire — which silently broke hold-to-cruise.
+    private func commonModeTimer(interval: TimeInterval, repeats: Bool, block: @escaping () -> Void) -> Timer {
+        let timer = Timer(timeInterval: interval, repeats: repeats) { _ in block() }
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
+    }
+
     func show(for newTarget: ScrollTarget, at anchorPoint: NSPoint) {
         if let panel, panel.isVisible {
             // Already up: adopt the new target, keep the anchor stable unless the
@@ -209,7 +218,7 @@ final class OverlayController {
         case .began:
             pressStartedAt = Date()
             cruiseStartTimer?.invalidate()
-            cruiseStartTimer = Timer.scheduledTimer(withTimeInterval: cruiseDelay, repeats: false) { [weak self] _ in
+            cruiseStartTimer = commonModeTimer(interval: cruiseDelay, repeats: false) { [weak self] in
                 self?.startCruise(direction)
             }
         case .releasedInside:
@@ -254,7 +263,7 @@ final class OverlayController {
         // active press keeps delivering its mouse-up to us regardless.
         panel.ignoresMouseEvents = true
 
-        cruiseTimer = Timer.scheduledTimer(withTimeInterval: 1 / cruiseTickHz, repeats: true) { [weak self] _ in
+        cruiseTimer = commonModeTimer(interval: 1 / cruiseTickHz, repeats: true) { [weak self] in
             self?.cruiseTick(direction)
         }
 
@@ -316,7 +325,7 @@ final class OverlayController {
         hideTimer?.invalidate()
         hideTimer = nil
         guard !settings.neverHide, !isHovering, !cruising else { return }
-        hideTimer = Timer.scheduledTimer(withTimeInterval: settings.hideTimeout, repeats: false) { [weak self] _ in
+        hideTimer = commonModeTimer(interval: settings.hideTimeout, repeats: false) { [weak self] in
             self?.hide()
         }
     }
