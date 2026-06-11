@@ -33,16 +33,18 @@ private struct JumpButton: View {
         Button(action: action) {
             ZStack {
                 Circle()
-                    .fill(.regularMaterial)
+                    .fill(.ultraThinMaterial)
                 Circle()
-                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
+                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
                 Image(systemName: systemImage)
                     .font(.system(size: diameter * 0.42, weight: .semibold))
                     .foregroundStyle(.primary)
             }
             .frame(width: diameter, height: diameter)
+            // Unobtrusive at rest; solid once the pointer aims at it.
+            .opacity(hovering ? 1.0 : 0.55)
             .scaleEffect(hovering ? 1.12 : 1.0)
-            .shadow(color: .black.opacity(0.25), radius: hovering ? 6 : 3, y: 1)
+            .shadow(color: .black.opacity(hovering ? 0.25 : 0.1), radius: hovering ? 6 : 2, y: 1)
             .animation(.easeOut(duration: 0.12), value: hovering)
         }
         .buttonStyle(.plain)
