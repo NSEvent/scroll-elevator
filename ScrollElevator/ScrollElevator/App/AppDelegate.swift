@@ -1,0 +1,49 @@
+import AppKit
+import SwiftUI
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var settings: SettingsService!
+    private var scrollMonitor: ScrollMonitor!
+    private var overlayController: OverlayController!
+    private var menuBarService: MenuBarService!
+    private var settingsWindow: NSWindow?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        settings = SettingsService()
+        overlayController = OverlayController(settings: settings)
+        scrollMonitor = ScrollMonitor(settings: settings, overlayController: overlayController)
+        menuBarService = MenuBarService(
+            settings: settings,
+            openSettings: { [weak self] in self?.showSettingsWindow() }
+        )
+
+        // First-run UX: surface the Accessibility prompt immediately rather than
+        // failing silently on the first jump.
+        JumpDispatcher.promptForAccessibilityIfNeeded()
+
+        scrollMonitor.start()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        scrollMonitor.stop()
+    }
+
+    private func showSettingsWindow() {
+        if settingsWindow == nil {
+            let hosting = NSHostingView(rootView: SettingsView(settings: settings))
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 440, height: 460),
+                styleMask: [.titled, .closable, .miniaturizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Scroll Elevator Settings"
+            window.contentView = hosting
+            window.isReleasedWhenClosed = false
+            window.center()
+            settingsWindow = window
+        }
+        settingsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
