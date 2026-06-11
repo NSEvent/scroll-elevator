@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// Press lifecycle reported to the controller. Releasing outside the button
+/// cancels — no jump fires — matching standard button semantics.
+enum PressPhase {
+    case began
+    case releasedInside
+    case releasedOutside
+}
+
 /// The transient elevator buttons: jump-to-top above the cursor anchor,
 /// jump-to-bottom below it. Small, predictable, easy to ignore.
 struct OverlayView: View {
@@ -8,9 +16,9 @@ struct OverlayView: View {
     let idleOpacity: Double
     let dimTop: Bool
     let dimBottom: Bool
-    /// Reports raw press state; the controller decides jump (quick release)
-    /// vs cruise (hold).
-    let onPress: (JumpDirection, Bool) -> Void
+    /// Reports the press lifecycle; the controller decides jump (quick
+    /// release), cruise (hold), or cancel (released off the button).
+    let onPress: (JumpDirection, PressPhase) -> Void
     let onHoverChange: (Bool) -> Void
 
     var body: some View {
@@ -25,7 +33,7 @@ struct OverlayView: View {
                 dimmed: dimTop,
                 helpText: "Jump to top — hold to cruise",
                 onHoverChange: onHoverChange,
-                onPress: { pressed in onPress(.top, pressed) }
+                onPress: { phase in onPress(.top, phase) }
             )
             JumpButton(
                 systemImage: "arrow.down.to.line",
@@ -34,7 +42,7 @@ struct OverlayView: View {
                 dimmed: dimBottom,
                 helpText: "Jump to bottom — hold to cruise",
                 onHoverChange: onHoverChange,
-                onPress: { pressed in onPress(.bottom, pressed) }
+                onPress: { phase in onPress(.bottom, phase) }
             )
         }
         .padding(12)
@@ -48,10 +56,11 @@ private struct JumpButton: View {
     let dimmed: Bool
     let helpText: String
     let onHoverChange: (Bool) -> Void
-    let onPress: (Bool) -> Void
+    let onPress: (PressPhase) -> Void
 
     @State private var hovering = false
     @State private var pressed = false
+    @State private var pressActive = false
 
     var body: some View {
         JumpButtonVisual(systemImage: systemImage, diameter: diameter)
@@ -66,15 +75,19 @@ private struct JumpButton: View {
             .contentShape(Circle())
             .gesture(
                 DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        if !pressed {
-                            pressed = true
-                            onPress(true)
+                    .onChanged { value in
+                        if !pressActive {
+                            pressActive = true
+                            onPress(.began)
                         }
+                        // Pressed look tracks whether the pointer is still on
+                        // the button, like a standard control.
+                        pressed = isInside(value.location)
                     }
-                    .onEnded { _ in
+                    .onEnded { value in
+                        pressActive = false
                         pressed = false
-                        onPress(false)
+                        onPress(isInside(value.location) ? .releasedInside : .releasedOutside)
                     }
             )
             .onHover { value in
@@ -82,6 +95,12 @@ private struct JumpButton: View {
                 onHoverChange(value)
             }
             .help(helpText)
+    }
+
+    /// Inside the button circle, with a little slop for micro-drift.
+    private func isInside(_ point: CGPoint) -> Bool {
+        let center = diameter / 2
+        return hypot(point.x - center, point.y - center) <= diameter / 2 + 6
     }
 
     private var currentOpacity: Double {

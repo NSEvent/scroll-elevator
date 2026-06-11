@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 — 2026-06-11
+
+### Fixed
+- Releasing off the button cancels: press, drag away, let go — no jump fires.
+  The pressed look tracks whether the pointer is on the button mid-drag, and a
+  hold that has already left the button won't start a cruise.
+
 ## 0.3.0 — 2026-06-11
 
 ### Added

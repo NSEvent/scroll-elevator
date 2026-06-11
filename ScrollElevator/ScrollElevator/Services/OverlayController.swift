@@ -148,7 +148,7 @@ final class OverlayController {
             idleOpacity: settings.idleOpacity,
             dimTop: position.map { $0 <= 0.001 } ?? false,
             dimBottom: position.map { $0 >= 0.999 } ?? false,
-            onPress: { [weak self] direction, pressed in self?.pressChanged(direction, pressed: pressed) },
+            onPress: { [weak self] direction, phase in self?.pressChanged(direction, phase: phase) },
             onHoverChange: { [weak self] hovering in self?.hoverChanged(hovering) }
         )
         let hosting = FirstMouseHostingView(rootView: view)
@@ -204,22 +204,33 @@ final class OverlayController {
     /// Hard cap — a lost mouse-up can never scroll forever.
     private let cruiseMaxDuration: TimeInterval = 20
 
-    private func pressChanged(_ direction: JumpDirection, pressed: Bool) {
-        if pressed {
+    private func pressChanged(_ direction: JumpDirection, phase: PressPhase) {
+        switch phase {
+        case .began:
             pressStartedAt = Date()
             cruiseStartTimer?.invalidate()
             cruiseStartTimer = Timer.scheduledTimer(withTimeInterval: cruiseDelay, repeats: false) { [weak self] _ in
                 self?.startCruise(direction)
             }
-        } else {
+        case .releasedInside:
             cruiseStartTimer?.invalidate()
             cruiseStartTimer = nil
+            pressStartedAt = nil
             if cruising {
                 stopCruise()
             } else {
                 performJump(direction)
             }
+        case .releasedOutside:
+            // Dragged off the button before letting go: cancel — no jump.
+            cruiseStartTimer?.invalidate()
+            cruiseStartTimer = nil
             pressStartedAt = nil
+            if cruising {
+                stopCruise()
+            } else {
+                restartHideTimer()
+            }
         }
     }
 
@@ -233,6 +244,9 @@ final class OverlayController {
 
     private func startCruise(_ direction: JumpDirection) {
         guard !cruising, let panel else { return }
+        // The hold only cruises if the pointer is still on the button it
+        // pressed — holding after dragging off is a cancel-in-progress.
+        guard pointerOnButton(direction) else { return }
         cruising = true
         cruiseBeganAt = Date()
         // Synthetic wheel events route by cursor position; make the panel
@@ -274,6 +288,18 @@ final class OverlayController {
         }
         panel?.ignoresMouseEvents = false
         restartHideTimer()
+    }
+
+    /// Whether the pointer is currently over the given button, computed from
+    /// the panel's actual frame (which may be clamped at screen edges).
+    private func pointerOnButton(_ direction: JumpDirection) -> Bool {
+        guard let panel else { return false }
+        let frame = panel.frame
+        let centerX = frame.midX
+        let edgeOffset = panelPadding + buttonDiameter / 2
+        let centerY = direction == .top ? frame.maxY - edgeOffset : frame.minY + edgeOffset
+        let location = NSEvent.mouseLocation
+        return hypot(location.x - centerX, location.y - centerY) <= buttonDiameter / 2 + 6
     }
 
     private func hoverChanged(_ hovering: Bool) {
