@@ -12,8 +12,9 @@ end. Ignore them and they fade away.
   (or mid-glide once trackpad momentum crosses the threshold) — never on the
   first tick. Wheel mice fall back to quiet-period detection.
 - It anchors at the cursor position at show time, when the pointer is
-  stationary, and only lives inside a small circle just big enough to reach
-  both buttons. Move the pointer outside that circle and it hides immediately.
+  stationary, and only lives inside a tall, narrow corridor: tight left/right
+  (a bit wider than the buttons), roomier up/down (a bit past the buttons).
+  Move the pointer outside that corridor and it hides immediately.
 - The overlay is a non-activating borderless `NSPanel`, so clicking a button
   never steals focus from what you were scrolling.
 - The window under the cursor is captured at burst start (scroll-follows-mouse
@@ -34,7 +35,7 @@ Menu bar → Settings…
 
 - Enable/disable
 - Hide timeout (1–6 s)
-- Button distance from cursor (30–80 pt)
+- Button distance from cursor (30–80 pt, default 56)
 - Scroll threshold before the overlay shows (20–200 pt)
 - Ignored apps (games, remote desktops, design canvases…)
 

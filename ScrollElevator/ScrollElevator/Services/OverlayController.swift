@@ -25,10 +25,14 @@ final class OverlayController {
     private let buttonDiameter: CGFloat = 38
     private let panelPadding: CGFloat = 12
 
-    /// The overlay lives inside a small circle around the anchor — just big
-    /// enough to reach both buttons. Pointer travel beyond it hides the overlay.
-    private var dismissRadius: CGFloat {
-        CGFloat(settings.placementDistance) + buttonDiameter / 2 + 16
+    /// The overlay lives inside a tall, narrow corridor around the anchor:
+    /// tight left/right (a bit wider than the buttons), roomier up/down
+    /// (a bit past the buttons). Pointer travel beyond it hides the overlay.
+    private var horizontalDismissTolerance: CGFloat {
+        buttonDiameter / 2 + 12
+    }
+    private var verticalDismissTolerance: CGFloat {
+        CGFloat(settings.placementDistance) + buttonDiameter / 2 + 24
     }
 
     init(settings: SettingsService) {
@@ -173,11 +177,12 @@ final class OverlayController {
     private func installDismissMonitors() {
         removeDismissMonitors()
 
-        // Pointer left the small circle that contains the buttons → hide.
+        // Pointer left the corridor that contains the buttons → hide.
         let moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged], handler: { [weak self] _ in
             guard let self else { return }
             let location = NSEvent.mouseLocation
-            if hypot(location.x - self.anchor.x, location.y - self.anchor.y) > self.dismissRadius {
+            if abs(location.x - self.anchor.x) > self.horizontalDismissTolerance ||
+                abs(location.y - self.anchor.y) > self.verticalDismissTolerance {
                 self.hide()
             }
         })

@@ -39,7 +39,7 @@ final class SettingsService: ObservableObject {
         defaults.register(defaults: [
             Key.enabled: true,
             Key.hideTimeout: 2.5,
-            Key.placementDistance: 44.0,
+            Key.placementDistance: 56.0,
             Key.scrollThreshold: 60.0,
             Key.ignoredBundleIDs: [String](),
         ])
