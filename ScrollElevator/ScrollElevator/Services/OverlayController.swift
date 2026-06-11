@@ -28,11 +28,13 @@ final class OverlayController {
     /// The overlay lives inside a tall, narrow corridor around the anchor:
     /// tight left/right (a bit wider than the buttons), roomier up/down
     /// (a bit past the buttons). Pointer travel beyond it hides the overlay.
+    /// The grace margin keeps an overshoot near a button edge from dismissing.
+    private let dismissGraceMargin: CGFloat = 10
     private var horizontalDismissTolerance: CGFloat {
-        buttonDiameter / 2 + 12
+        buttonDiameter / 2 + 12 + dismissGraceMargin
     }
     private var verticalDismissTolerance: CGFloat {
-        CGFloat(settings.placementDistance) + buttonDiameter / 2 + 24
+        CGFloat(settings.placementDistance) + buttonDiameter / 2 + 24 + dismissGraceMargin
     }
 
     init(settings: SettingsService) {
@@ -177,9 +179,10 @@ final class OverlayController {
     private func installDismissMonitors() {
         removeDismissMonitors()
 
-        // Pointer left the corridor that contains the buttons → hide.
+        // Pointer left the corridor that contains the buttons → hide. Never
+        // dismiss by movement while a button is hovered.
         let moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged], handler: { [weak self] _ in
-            guard let self else { return }
+            guard let self, !self.isHovering else { return }
             let location = NSEvent.mouseLocation
             if abs(location.x - self.anchor.x) > self.horizontalDismissTolerance ||
                 abs(location.y - self.anchor.y) > self.verticalDismissTolerance {
