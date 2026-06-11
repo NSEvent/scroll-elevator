@@ -145,7 +145,6 @@ final class OverlayController {
             dimTop: position.map { $0 <= 0.001 } ?? false,
             dimBottom: position.map { $0 >= 0.999 } ?? false,
             onJump: { [weak self] direction in self?.performJump(direction) },
-            onPage: { [weak self] direction in self?.performPage(direction) },
             onHoverChange: { [weak self] hovering in self?.hoverChanged(hovering) }
         )
         let hosting = FirstMouseHostingView(rootView: view)
@@ -188,21 +187,6 @@ final class OverlayController {
         guard let target else { return }
         JumpDispatcher.jump(direction, target: target, rule: settings.rule(for: target.bundleIdentifier))
         hide()
-    }
-
-    /// Long-press page-step: the overlay stays up so the user can keep paging.
-    /// The page is a synthetic wheel event routed by cursor position, so the
-    /// panel briefly ignores mouse events to let it through to the app beneath.
-    private func performPage(_ direction: JumpDirection) {
-        guard let target, let panel else { return }
-        panel.ignoresMouseEvents = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) { [weak self] in
-            JumpDispatcher.page(direction, target: target)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                self?.panel?.ignoresMouseEvents = false
-            }
-        }
-        restartHideTimer()
     }
 
     private func hoverChanged(_ hovering: Bool) {

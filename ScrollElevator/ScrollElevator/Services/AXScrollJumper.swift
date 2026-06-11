@@ -25,20 +25,6 @@ enum AXScrollJumper {
         return number.doubleValue
     }
 
-    /// Height in points of the scroll area under `point` — used to size a
-    /// "page" for the long-press page action.
-    static func scrollAreaHeight(atCocoaPoint point: NSPoint) -> CGFloat? {
-        guard let area = climb(fromCocoaPoint: point, until: { element in
-            role(of: element) == kAXScrollAreaRole as String
-        }) else { return nil }
-        var ref: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(area, kAXSizeAttribute as CFString, &ref) == .success,
-              let ref, CFGetTypeID(ref) == AXValueGetTypeID() else { return nil }
-        var size = CGSize.zero
-        guard AXValueGetValue((ref as! AXValue), .cgSize, &size) else { return nil }
-        return size.height
-    }
-
     // MARK: - Element lookup
 
     private static func verticalScrollBar(atCocoaPoint point: NSPoint) -> AXUIElement? {

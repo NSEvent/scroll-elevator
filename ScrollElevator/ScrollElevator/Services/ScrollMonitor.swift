@@ -56,13 +56,6 @@ final class ScrollMonitor {
     }
 
     private func handleScroll(_ event: NSEvent) {
-        // Our own long-press page action is a synthetic wheel event — don't
-        // treat it as the user scrolling.
-        if let cgEvent = event.cgEvent,
-           cgEvent.getIntegerValueField(.eventSourceUserData) == JumpDispatcher.syntheticScrollUserData {
-            return
-        }
-
         if !machine.burstActive {
             // Burst start: capture the target once, where the hand already is.
             burstTarget = nil

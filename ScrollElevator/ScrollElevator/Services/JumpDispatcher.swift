@@ -60,43 +60,6 @@ enum JumpDispatcher {
         }
     }
 
-    /// Marks our synthetic page-scroll events so the scroll monitor ignores them.
-    static let syntheticScrollUserData: Int64 = 0x53_45_4C_56  // "SELV"
-
-    /// One page up/down (long-press action), as a synthetic scroll-wheel event
-    /// routed to the view under the pointer. Keystrokes (PageUp/PageDown) are
-    /// app-roulette — terminals snap scrollback to the prompt on any key, chat
-    /// apps rebind paging — but a wheel event pages anything scrollable.
-    /// Caller must make the overlay panel ignore mouse events around the post,
-    /// or the wheel event routes to the overlay itself.
-    static func page(_ direction: JumpDirection, target: ScrollTarget) {
-        guard promptForAccessibilityIfNeeded() else { return }
-
-        let pageHeight = AXScrollJumper.scrollAreaHeight(atCocoaPoint: target.capturePoint) ?? 700
-        let magnitude = Int32((pageHeight * 0.85).rounded())
-        // Positive wheel delta scrolls toward the top (same sign convention as
-        // scrollingDeltaY).
-        let delta = direction == .top ? magnitude : -magnitude
-
-        let source = CGEventSource(stateID: .combinedSessionState)
-        guard let event = CGEvent(
-            scrollWheelEvent2Source: source,
-            units: .pixel,
-            wheelCount: 1,
-            wheel1: delta,
-            wheel2: 0,
-            wheel3: 0
-        ) else { return }
-        event.setIntegerValueField(.eventSourceUserData, value: syntheticScrollUserData)
-        if let primary = NSScreen.screens.first {
-            event.location = CGPoint(
-                x: target.capturePoint.x,
-                y: primary.frame.maxY - target.capturePoint.y
-            )
-        }
-        event.post(tap: .cghidEventTap)
-    }
-
     private static func defaultChord(for bundleIdentifier: String?, direction: JumpDirection) -> KeyChord {
         if let bundleIdentifier {
             if homeEndApps.contains(bundleIdentifier) {

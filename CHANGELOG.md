@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 — 2026-06-11
+
+### Removed
+- Long-press paging. A press is a press: both quick and held clicks jump.
+  Paging never felt right on a transient overlay.
+
 ## 0.2.1 — 2026-06-11
 
 ### Fixed
