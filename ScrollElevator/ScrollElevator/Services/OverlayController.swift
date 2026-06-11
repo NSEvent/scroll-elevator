@@ -62,12 +62,10 @@ final class OverlayController {
         let panel = makePanel()
         self.panel = panel
         panel.setFrameOrigin(panelOrigin(for: anchor, panelSize: panel.frame.size))
-        panel.alphaValue = 0
+        // No entrance animation — the fade-in read as a flash. The buttons are
+        // translucent at rest, so an instant appearance is already gentle.
+        panel.alphaValue = 1
         panel.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.15
-            panel.animator().alphaValue = 1
-        }
 
         installDismissMonitors()
         restartHideTimer()
