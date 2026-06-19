@@ -98,6 +98,9 @@ final class OverlayController {
         pressStartedAt = nil
         hideTimer?.invalidate()
         hideTimer = nil
+        passthroughRestoreTimer?.invalidate()
+        passthroughRestoreTimer = nil
+        scrollPassthrough = false
         removeDismissMonitors()
         guard let panel else { return }
         self.panel = nil
@@ -144,6 +147,7 @@ final class OverlayController {
         panel.becomesKeyOnlyIfNeeded = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.onDeadClick = { [weak self] in self?.hide() }
+        panel.onScrollWheel = { [weak self] event in self?.forwardScroll(event) }
 
         // Edge awareness: dim the button that can't do anything. Only known
         // when the target exposes an AX scrollbar; nil means "don't dim".
@@ -192,6 +196,54 @@ final class OverlayController {
             origin.y = min(max(origin.y, visible.minY), visible.maxY - panelSize.height)
         }
         return origin
+    }
+
+    // MARK: - Scroll passthrough
+
+    /// While true, the panel ignores mouse events so wheel scrolls fall through
+    /// to the window beneath. Re-armed to false shortly after scrolling stops so
+    /// the buttons stay clickable at rest.
+    private var scrollPassthrough = false
+    private var passthroughRestoreTimer: Timer?
+    /// How long after the last over-panel scroll before buttons click again.
+    private let passthroughRestoreDelay: TimeInterval = 0.25
+
+    /// The panel must ignore the mouse while cruising (so synthetic scrolls
+    /// route beneath it) or while passing a scroll through. Single owner of the
+    /// flag so the two features can't clobber each other.
+    private func applyPanelInteractivity() {
+        panel?.ignoresMouseEvents = cruising || scrollPassthrough
+    }
+
+    /// A scroll over the overlay should keep scrolling whatever was underneath
+    /// it — the buttons are an accidental parking spot for the cursor, not a
+    /// scroll surface. Posting straight to the target pid doesn't actually
+    /// scroll it, so instead make the panel transparent to the mouse: this and
+    /// the rest of the burst then route to the window beneath on their own. The
+    /// first tick was already delivered to us, so re-emit it (tagged, so our own
+    /// monitor ignores it) to land it beneath too.
+    private func forwardScroll(_ event: NSEvent) {
+        // Don't re-handle our own re-emitted ticks if one races back to us
+        // before the transparency toggle takes effect.
+        if event.cgEvent?.getIntegerValueField(.eventSourceUserData) == JumpDispatcher.syntheticScrollUserData {
+            return
+        }
+
+        scrollPassthrough = true
+        applyPanelInteractivity()
+
+        if let wheel = event.cgEvent?.copy() {
+            wheel.setIntegerValueField(.eventSourceUserData, value: JumpDispatcher.syntheticScrollUserData)
+            wheel.post(tap: .cghidEventTap)
+        }
+
+        passthroughRestoreTimer?.invalidate()
+        passthroughRestoreTimer = commonModeTimer(interval: passthroughRestoreDelay, repeats: false) { [weak self] in
+            guard let self else { return }
+            self.passthroughRestoreTimer = nil
+            self.scrollPassthrough = false
+            self.applyPanelInteractivity()
+        }
     }
 
     // MARK: - Actions
@@ -261,7 +313,7 @@ final class OverlayController {
         // Synthetic wheel events route by cursor position; make the panel
         // transparent to them so they reach the target window beneath. The
         // active press keeps delivering its mouse-up to us regardless.
-        panel.ignoresMouseEvents = true
+        applyPanelInteractivity()
 
         cruiseTimer = commonModeTimer(interval: 1 / cruiseTickHz, repeats: true) { [weak self] in
             self?.cruiseTick(direction)
@@ -295,7 +347,7 @@ final class OverlayController {
             NSEvent.removeMonitor(cruiseStopMonitor)
             self.cruiseStopMonitor = nil
         }
-        panel?.ignoresMouseEvents = false
+        applyPanelInteractivity()
         restartHideTimer()
     }
 
@@ -379,8 +431,18 @@ final class OverlayController {
 /// without hitting a button, dismiss instead of silently swallowing it.
 private final class OverlayPanel: NSPanel {
     var onDeadClick: (() -> Void)?
+    var onScrollWheel: ((NSEvent) -> Void)?
 
     override func sendEvent(_ event: NSEvent) {
+        // The overlay floats above whatever the user was scrolling. If the
+        // cursor drifts over a button mid-scroll, the wheel event would land on
+        // us and be swallowed — so hand it off to fall through to the target
+        // instead of stealing it. (During cruise the panel ignores mouse events
+        // entirely, so this path isn't hit then.)
+        if event.type == .scrollWheel {
+            onScrollWheel?(event)
+            return
+        }
         if event.type == .leftMouseDown,
            let contentView,
            contentView.hitTest(event.locationInWindow) == nil {
