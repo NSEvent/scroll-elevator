@@ -8,23 +8,28 @@ enum PressPhase {
     case releasedOutside
 }
 
+/// Hover/press state for the overlay buttons. The panel is permanently
+/// click-through (so scroll gestures fall through to the app beneath instead of
+/// being stolen), which means SwiftUI never sees the mouse. The controller
+/// drives these from a global mouse-move monitor (hover) and a CGEventTap
+/// (press), and the buttons render from them.
+final class OverlayInputState: ObservableObject {
+    @Published var hovered: JumpDirection?
+    @Published var pressed: JumpDirection?
+}
+
 /// The transient elevator buttons: jump-to-top above the cursor anchor,
-/// jump-to-bottom below it. Small, predictable, easy to ignore.
+/// jump-to-bottom below it. Small, predictable, easy to ignore. Display-only —
+/// all interaction is fed in through `input`.
 struct OverlayView: View {
     let buttonDiameter: CGFloat
     let spacing: CGFloat
     let idleOpacity: Double
     let dimTop: Bool
     let dimBottom: Bool
-    /// Reports the press lifecycle; the controller decides jump (quick
-    /// release), cruise (hold), or cancel (released off the button).
-    let onPress: (JumpDirection, PressPhase) -> Void
-    let onHoverChange: (Bool) -> Void
+    @ObservedObject var input: OverlayInputState
 
     var body: some View {
-        // Hover is reported per-button, not on the stack: the cursor parks in
-        // the gap between the buttons when the overlay appears, and stack-wide
-        // hover would permanently pause the hide timer.
         VStack(spacing: spacing) {
             JumpButton(
                 systemImage: "arrow.up.to.line",
@@ -32,8 +37,8 @@ struct OverlayView: View {
                 idleOpacity: idleOpacity,
                 dimmed: dimTop,
                 helpText: "Jump to top — hold to cruise",
-                onHoverChange: onHoverChange,
-                onPress: { phase in onPress(.top, phase) }
+                hovering: input.hovered == .top,
+                pressed: input.pressed == .top
             )
             JumpButton(
                 systemImage: "arrow.down.to.line",
@@ -41,8 +46,8 @@ struct OverlayView: View {
                 idleOpacity: idleOpacity,
                 dimmed: dimBottom,
                 helpText: "Jump to bottom — hold to cruise",
-                onHoverChange: onHoverChange,
-                onPress: { phase in onPress(.bottom, phase) }
+                hovering: input.hovered == .bottom,
+                pressed: input.pressed == .bottom
             )
         }
         .padding(12)
@@ -55,52 +60,20 @@ private struct JumpButton: View {
     let idleOpacity: Double
     let dimmed: Bool
     let helpText: String
-    let onHoverChange: (Bool) -> Void
-    let onPress: (PressPhase) -> Void
-
-    @State private var hovering = false
-    @State private var pressed = false
-    @State private var pressActive = false
+    let hovering: Bool
+    let pressed: Bool
 
     var body: some View {
         JumpButtonVisual(systemImage: systemImage, diameter: diameter)
             // Edge-aware: a button that can't do anything (already at the
-            // top/bottom) fades further back but stays clickable — content
+            // top/bottom) fades further back but stays usable — content
             // can move under a stale reading.
             .opacity(currentOpacity)
             .scaleEffect(pressed ? 0.92 : (hovering ? 1.12 : 1.0))
             .shadow(color: .black.opacity(hovering ? 0.25 : 0), radius: hovering ? 6 : 0, y: 1)
             .animation(.easeOut(duration: 0.12), value: hovering)
             .animation(.easeOut(duration: 0.08), value: pressed)
-            .contentShape(Circle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        if !pressActive {
-                            pressActive = true
-                            onPress(.began)
-                        }
-                        // Pressed look tracks whether the pointer is still on
-                        // the button, like a standard control.
-                        pressed = isInside(value.location)
-                    }
-                    .onEnded { value in
-                        pressActive = false
-                        pressed = false
-                        onPress(isInside(value.location) ? .releasedInside : .releasedOutside)
-                    }
-            )
-            .onHover { value in
-                hovering = value
-                onHoverChange(value)
-            }
             .help(helpText)
-    }
-
-    /// Inside the button circle, with a little slop for micro-drift.
-    private func isInside(_ point: CGPoint) -> Bool {
-        let center = diameter / 2
-        return hypot(point.x - center, point.y - center) <= diameter / 2 + 6
     }
 
     private var currentOpacity: Double {

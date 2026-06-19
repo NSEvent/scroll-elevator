@@ -15,7 +15,7 @@ struct ScrollTarget {
     }
 }
 
-enum JumpDirection {
+enum JumpDirection: Equatable {
     case top
     case bottom
 }

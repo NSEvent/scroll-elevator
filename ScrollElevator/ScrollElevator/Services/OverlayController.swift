@@ -1,12 +1,22 @@
 import AppKit
+import CoreGraphics
 import SwiftUI
 
 /// Owns the non-activating overlay panel: placement around the cursor anchor,
 /// the optional hide timeout, and all dismissal triggers.
+///
+/// The panel is permanently click-through (`ignoresMouseEvents = true`). macOS
+/// latches a continuous scroll gesture to whichever window first receives it and
+/// won't release it mid-gesture, so a panel that ever grabs the mouse will steal
+/// any scroll that starts (or drifts) over it. Keeping it transparent lets every
+/// scroll fall through to the app beneath untouched. Button hover and clicks are
+/// instead read from a global mouse-move monitor and a CGEventTap that consumes
+/// clicks landing on a button.
 final class OverlayController {
     private let settings: SettingsService
 
     private var panel: NSPanel?
+    private var input: OverlayInputState?
     private var target: ScrollTarget?
     private var anchor: NSPoint = .zero
     private var isHovering = false
@@ -17,6 +27,11 @@ final class OverlayController {
     private var dismissMonitors: [Any] = []
     private var workspaceObserver: NSObjectProtocol?
 
+    // Click tap, installed only while the overlay is visible.
+    private var clickTap: CFMachPort?
+    private var clickTapSource: CFRunLoopSource?
+    private var pressedButton: JumpDirection?
+
     /// Minimum quiet time after a hide before the overlay may reappear.
     private let cooldown: TimeInterval = 0.75
     /// A new burst anchored at least this far away repositions a visible overlay.
@@ -24,6 +39,8 @@ final class OverlayController {
 
     private let buttonDiameter: CGFloat = 38
     private let panelPadding: CGFloat = 12
+    /// Hit-test slop around a button circle, in points.
+    private let buttonHitSlop: CGFloat = 6
 
     /// The overlay lives inside a tall, narrow corridor around the anchor:
     /// tight left/right (a bit wider than the buttons), roomier up/down
@@ -77,6 +94,7 @@ final class OverlayController {
         panel.orderFrontRegardless()
 
         installDismissMonitors()
+        installClickTap()
         restartHideTimer()
     }
 
@@ -96,14 +114,14 @@ final class OverlayController {
         cruiseStartTimer?.invalidate()
         cruiseStartTimer = nil
         pressStartedAt = nil
+        pressedButton = nil
         hideTimer?.invalidate()
         hideTimer = nil
-        passthroughRestoreTimer?.invalidate()
-        passthroughRestoreTimer = nil
-        scrollPassthrough = false
         removeDismissMonitors()
+        removeClickTap()
         guard let panel else { return }
         self.panel = nil
+        self.input = nil
         target = nil
         isHovering = false
         lastHideAt = Date()
@@ -131,7 +149,7 @@ final class OverlayController {
             height: buttonDiameter * 2 + spacing + panelPadding * 2
         )
 
-        let panel = OverlayPanel(
+        let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
@@ -146,8 +164,9 @@ final class OverlayController {
         panel.isMovableByWindowBackground = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
-        panel.onDeadClick = { [weak self] in self?.hide() }
-        panel.onScrollWheel = { [weak self] event in self?.forwardScroll(event) }
+        // Permanently click-through: never grab (and so never latch) a scroll.
+        // Clicks are recovered via the event tap; see the type comment.
+        panel.ignoresMouseEvents = true
 
         // Edge awareness: dim the button that can't do anything. Only known
         // when the target exposes an AX scrollbar; nil means "don't dim".
@@ -155,31 +174,19 @@ final class OverlayController {
             ? AXScrollJumper.scrollPosition(atCocoaPoint: target.capturePoint)
             : nil
 
+        let input = OverlayInputState()
+        self.input = input
+
         let view = OverlayView(
             buttonDiameter: buttonDiameter,
             spacing: spacing,
             idleOpacity: settings.idleOpacity,
             dimTop: position.map { $0 <= 0.001 } ?? false,
             dimBottom: position.map { $0 >= 0.999 } ?? false,
-            onPress: { [weak self] direction, phase in self?.pressChanged(direction, phase: phase) },
-            onHoverChange: { [weak self] hovering in self?.hoverChanged(hovering) }
+            input: input
         )
-        let hosting = FirstMouseHostingView(rootView: view)
+        let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: contentSize)
-        // Only the two button circles are clickable; the gap between them —
-        // where the cursor parks — stays click-through.
-        let padding = panelPadding
-        let diameter = buttonDiameter
-        hosting.interactiveRegion = { point, bounds in
-            let radius = diameter / 2 + 2
-            let centerX = bounds.width / 2
-            let edgeOffset = padding + diameter / 2
-            // The two buttons are symmetric about the vertical center, so this
-            // check is independent of view flippedness.
-            let toNear = hypot(point.x - centerX, point.y - edgeOffset)
-            let toFar = hypot(point.x - centerX, (bounds.height - point.y) - edgeOffset)
-            return min(toNear, toFar) <= radius
-        }
         panel.contentView = hosting
         return panel
     }
@@ -198,51 +205,96 @@ final class OverlayController {
         return origin
     }
 
-    // MARK: - Scroll passthrough
+    // MARK: - Button geometry
 
-    /// While true, the panel ignores mouse events so wheel scrolls fall through
-    /// to the window beneath. Re-armed to false shortly after scrolling stops so
-    /// the buttons stay clickable at rest.
-    private var scrollPassthrough = false
-    private var passthroughRestoreTimer: Timer?
-    /// How long after the last over-panel scroll before buttons click again.
-    private let passthroughRestoreDelay: TimeInterval = 0.25
-
-    /// The panel must ignore the mouse while cruising (so synthetic scrolls
-    /// route beneath it) or while passing a scroll through. Single owner of the
-    /// flag so the two features can't clobber each other.
-    private func applyPanelInteractivity() {
-        panel?.ignoresMouseEvents = cruising || scrollPassthrough
+    /// Which button (if any) the given Cocoa-global point sits on, computed from
+    /// the panel's actual frame (which may be clamped at screen edges).
+    fileprivate func button(at location: NSPoint) -> JumpDirection? {
+        guard let panel else { return nil }
+        let frame = panel.frame
+        let centerX = frame.midX
+        let edgeOffset = panelPadding + buttonDiameter / 2
+        let radius = buttonDiameter / 2 + buttonHitSlop
+        let topCenter = NSPoint(x: centerX, y: frame.maxY - edgeOffset)
+        if hypot(location.x - topCenter.x, location.y - topCenter.y) <= radius { return .top }
+        let bottomCenter = NSPoint(x: centerX, y: frame.minY + edgeOffset)
+        if hypot(location.x - bottomCenter.x, location.y - bottomCenter.y) <= radius { return .bottom }
+        return nil
     }
 
-    /// A scroll over the overlay should keep scrolling whatever was underneath
-    /// it — the buttons are an accidental parking spot for the cursor, not a
-    /// scroll surface. Posting straight to the target pid doesn't actually
-    /// scroll it, so instead make the panel transparent to the mouse: this and
-    /// the rest of the burst then route to the window beneath on their own. The
-    /// first tick was already delivered to us, so re-emit it (tagged, so our own
-    /// monitor ignores it) to land it beneath too.
-    private func forwardScroll(_ event: NSEvent) {
-        // Don't re-handle our own re-emitted ticks if one races back to us
-        // before the transparency toggle takes effect.
-        if event.cgEvent?.getIntegerValueField(.eventSourceUserData) == JumpDispatcher.syntheticScrollUserData {
+    // MARK: - Click tap
+
+    /// The panel can't receive clicks (it's click-through), so a session-level
+    /// event tap watches for left-clicks landing on a button, consumes them so
+    /// the app beneath doesn't also see them, and drives the press lifecycle.
+    private func installClickTap() {
+        guard clickTap == nil else { return }
+        let mask: CGEventMask =
+            (CGEventMask(1) << CGEventType.leftMouseDown.rawValue) |
+            (CGEventMask(1) << CGEventType.leftMouseUp.rawValue) |
+            (CGEventMask(1) << CGEventType.leftMouseDragged.rawValue)
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: overlayClickTapCallback,
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ) else {
+            // No accessibility trust → no tap. Scroll still passes through; the
+            // buttons just won't click until the permission is granted.
             return
         }
+        clickTap = tap
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        clickTapSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+    }
 
-        scrollPassthrough = true
-        applyPanelInteractivity()
-
-        if let wheel = event.cgEvent?.copy() {
-            wheel.setIntegerValueField(.eventSourceUserData, value: JumpDispatcher.syntheticScrollUserData)
-            wheel.post(tap: .cghidEventTap)
+    private func removeClickTap() {
+        if let tap = clickTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
         }
+        if let source = clickTapSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        }
+        clickTapSource = nil
+        clickTap = nil
+    }
 
-        passthroughRestoreTimer?.invalidate()
-        passthroughRestoreTimer = commonModeTimer(interval: passthroughRestoreDelay, repeats: false) { [weak self] in
-            guard let self else { return }
-            self.passthroughRestoreTimer = nil
-            self.scrollPassthrough = false
-            self.applyPanelInteractivity()
+    /// Called on the main thread from the tap callback. Returns nil to consume.
+    fileprivate func handleClickEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        let passthrough = Unmanaged.passUnretained(event)
+
+        switch type {
+        case .tapDisabledByTimeout, .tapDisabledByUserInput:
+            if let clickTap { CGEvent.tapEnable(tap: clickTap, enable: true) }
+            return passthrough
+
+        case .leftMouseDown:
+            guard let direction = button(at: NSEvent.mouseLocation) else { return passthrough }
+            pressedButton = direction
+            input?.pressed = direction
+            pressChanged(direction, phase: .began)
+            return nil
+
+        case .leftMouseDragged:
+            guard let pressed = pressedButton else { return passthrough }
+            // Pressed look tracks whether the pointer is still on the button.
+            input?.pressed = (button(at: NSEvent.mouseLocation) == pressed) ? pressed : nil
+            return nil
+
+        case .leftMouseUp:
+            guard let pressed = pressedButton else { return passthrough }
+            let inside = button(at: NSEvent.mouseLocation) == pressed
+            pressedButton = nil
+            input?.pressed = nil
+            pressChanged(pressed, phase: inside ? .releasedInside : .releasedOutside)
+            return nil
+
+        default:
+            return passthrough
         }
     }
 
@@ -304,23 +356,19 @@ final class OverlayController {
     // MARK: - Cruise
 
     private func startCruise(_ direction: JumpDirection) {
-        guard !cruising, let panel else { return }
+        guard !cruising, panel != nil else { return }
         // The hold only cruises if the pointer is still on the button it
         // pressed — holding after dragging off is a cancel-in-progress.
-        guard pointerOnButton(direction) else { return }
+        guard button(at: NSEvent.mouseLocation) == direction else { return }
         cruising = true
         cruiseBeganAt = Date()
-        // Synthetic wheel events route by cursor position; make the panel
-        // transparent to them so they reach the target window beneath. The
-        // active press keeps delivering its mouse-up to us regardless.
-        applyPanelInteractivity()
 
         cruiseTimer = commonModeTimer(interval: 1 / cruiseTickHz, repeats: true) { [weak self] in
             self?.cruiseTick(direction)
         }
 
-        // Backstop: if the mouse-up is ever misrouted past our gesture, the
-        // global monitor (which sees other apps' events) still ends the cruise.
+        // Backstop: if the mouse-up is ever missed by the tap, the global monitor
+        // (which sees other apps' events) still ends the cruise.
         cruiseStopMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp, handler: { [weak self] _ in
             self?.stopCruise()
         })
@@ -347,20 +395,7 @@ final class OverlayController {
             NSEvent.removeMonitor(cruiseStopMonitor)
             self.cruiseStopMonitor = nil
         }
-        applyPanelInteractivity()
         restartHideTimer()
-    }
-
-    /// Whether the pointer is currently over the given button, computed from
-    /// the panel's actual frame (which may be clamped at screen edges).
-    private func pointerOnButton(_ direction: JumpDirection) -> Bool {
-        guard let panel else { return false }
-        let frame = panel.frame
-        let centerX = frame.midX
-        let edgeOffset = panelPadding + buttonDiameter / 2
-        let centerY = direction == .top ? frame.maxY - edgeOffset : frame.minY + edgeOffset
-        let location = NSEvent.mouseLocation
-        return hypot(location.x - centerX, location.y - centerY) <= buttonDiameter / 2 + 6
     }
 
     private func hoverChanged(_ hovering: Bool) {
@@ -387,22 +422,31 @@ final class OverlayController {
     private func installDismissMonitors() {
         removeDismissMonitors()
 
-        // Pointer left the corridor that contains the buttons → hide. Never
-        // dismiss by movement while a button is hovered.
-        let moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged], handler: { [weak self] _ in
-            guard let self, !self.isHovering else { return }
+        // Track hover from raw movement (the panel is click-through, so SwiftUI
+        // never reports it) and hide on a corridor exit. Never dismiss by
+        // movement while a button is hovered.
+        let moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved], handler: { [weak self] _ in
+            guard let self else { return }
             let location = NSEvent.mouseLocation
-            if abs(location.x - self.anchor.x) > self.horizontalDismissTolerance ||
-                abs(location.y - self.anchor.y) > self.verticalDismissTolerance {
-                self.hide()
+            let over = self.button(at: location)
+            if self.input?.hovered != over { self.input?.hovered = over }
+            if (over != nil) != self.isHovering { self.hoverChanged(over != nil) }
+            if over == nil {
+                if abs(location.x - self.anchor.x) > self.horizontalDismissTolerance ||
+                    abs(location.y - self.anchor.y) > self.verticalDismissTolerance {
+                    self.hide()
+                }
             }
         })
         if let moveMonitor { dismissMonitors.append(moveMonitor) }
 
-        // Click anywhere outside the panel. (Global monitors never see events
-        // delivered to our own process, so button clicks don't trip this.)
+        // Click anywhere outside a button. (A click on a button is consumed by
+        // the tap, so it never reaches this monitor.)
         let clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown], handler: { [weak self] _ in
-            self?.hide()
+            guard let self else { return }
+            if self.button(at: NSEvent.mouseLocation) == nil {
+                self.hide()
+            }
         })
         if let clickMonitor { dismissMonitors.append(clickMonitor) }
 
@@ -427,45 +471,15 @@ final class OverlayController {
     }
 }
 
-/// Safety net behind the hit-test guard: if a click somehow lands on the panel
-/// without hitting a button, dismiss instead of silently swallowing it.
-private final class OverlayPanel: NSPanel {
-    var onDeadClick: (() -> Void)?
-    var onScrollWheel: ((NSEvent) -> Void)?
-
-    override func sendEvent(_ event: NSEvent) {
-        // The overlay floats above whatever the user was scrolling. If the
-        // cursor drifts over a button mid-scroll, the wheel event would land on
-        // us and be swallowed — so hand it off to fall through to the target
-        // instead of stealing it. (During cruise the panel ignores mouse events
-        // entirely, so this path isn't hit then.)
-        if event.type == .scrollWheel {
-            onScrollWheel?(event)
-            return
-        }
-        if event.type == .leftMouseDown,
-           let contentView,
-           contentView.hitTest(event.locationInWindow) == nil {
-            onDeadClick?()
-            return
-        }
-        super.sendEvent(event)
-    }
-}
-
-/// Buttons in a non-activating panel must accept the first click without the
-/// panel ever becoming key — and only the button circles are interactive.
-final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
-    /// Returns whether a point (in this view's coordinates) is clickable.
-    var interactiveRegion: ((NSPoint, NSRect) -> Bool)?
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        let local = superview.map { convert(point, from: $0) } ?? point
-        if let interactiveRegion, !interactiveRegion(local, bounds) {
-            return nil
-        }
-        return super.hitTest(point)
-    }
+/// C-compatible trampoline for the click tap. Routes back to the controller via
+/// the refcon pointer; runs on the main run loop (where the source is added).
+private func overlayClickTapCallback(
+    proxy: CGEventTapProxy,
+    type: CGEventType,
+    event: CGEvent,
+    refcon: UnsafeMutableRawPointer?
+) -> Unmanaged<CGEvent>? {
+    guard let refcon else { return Unmanaged.passUnretained(event) }
+    let controller = Unmanaged<OverlayController>.fromOpaque(refcon).takeUnretainedValue()
+    return controller.handleClickEvent(type: type, event: event)
 }
