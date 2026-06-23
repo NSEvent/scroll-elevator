@@ -26,7 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showOnboardingWindow()
         }
 
-        scrollMonitor.start()
+        if settings.enabled {
+            scrollMonitor.start()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

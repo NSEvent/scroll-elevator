@@ -38,8 +38,14 @@ final class ScrollMonitor {
             .store(in: &cancellables)
     }
 
+    /// Whether we *should* be running is the caller's call — the `settings.$enabled`
+    /// sink above, or AppDelegate at launch — and is deliberately NOT re-checked
+    /// here. `@Published` publishes in `willSet`, so during a false→true toggle the
+    /// sink runs while `settings.enabled` still reads its OLD value (false).
+    /// Re-checking it here would early-return and the monitor would never reinstall
+    /// on re-enable — the "disable then enable does nothing until restart" bug.
     func start() {
-        guard scrollEventMonitor == nil, settings.enabled else { return }
+        guard scrollEventMonitor == nil else { return }
         scrollEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
             self?.handleScroll(event)
         }
