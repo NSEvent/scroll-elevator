@@ -21,8 +21,8 @@ The whole point: **your hand never leaves the trackpad.** To hit Home, End, or �
 ![Scroll Elevator — jump buttons at the cursor on a long page](screenshots/buttons-in-action.png)
 
 <p>
-  <img src="screenshots/long-page.png" width="49%" alt="A long page in the browser, ready to jump to top or bottom" />
-  <img src="screenshots/works-anywhere.png" width="49%" alt="Scroll Elevator working in another app — it runs system-wide" />
+  <img src="screenshots/buttons-closeup.png" width="49%" alt="Close-up of the two frosted elevator buttons around the cursor" />
+  <img src="screenshots/jump-to-top.png" width="49%" alt="The jump-to-top button lit under the cursor on a long thread" />
 </p>
 
 > **Try it without downloading** — the [website](https://kevintang.xyz/apps/scroll-elevator/) runs a live JavaScript clone of the overlay right on the page. Scroll and the buttons appear at your cursor.
