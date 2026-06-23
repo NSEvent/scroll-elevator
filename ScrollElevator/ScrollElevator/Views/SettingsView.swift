@@ -446,11 +446,16 @@ private struct LivePreviewCard: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color(nsColor: .textBackgroundColor), Color(nsColor: .windowBackgroundColor)],
-                        startPoint: .top, endPoint: .bottom
-                    )
+                .fill(Color(nsColor: .windowBackgroundColor))
+                .overlay(
+                    // Darken the mock page so it recedes instead of pulling focus.
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [.black.opacity(0.14), .black.opacity(0.26)],
+                                startPoint: .top, endPoint: .bottom
+                            )
+                        )
                 )
 
             // Mock page content.
