@@ -122,12 +122,17 @@ private struct OnboardingBullet: View {
     let text: String
 
     var body: some View {
-        Label {
-            Text(text)
-        } icon: {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: symbol)
                 .foregroundStyle(.tint)
                 .frame(width: 20)
+                .padding(.top, 1)
+            Text(text)
+                // Claim the vertical space wrapping needs; otherwise the host
+                // view's fittingSize under-measures and the last bullet truncates.
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
         }
     }
 }

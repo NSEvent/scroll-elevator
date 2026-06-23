@@ -40,12 +40,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 openWelcome: { [weak self] in self?.showOnboardingWindow() }
             ))
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 480, height: 500),
-                styleMask: [.titled, .closable, .miniaturizable],
+                contentRect: NSRect(x: 0, y: 0, width: 520, height: 780),
+                styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
             window.title = "Scroll Elevator Settings"
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.isMovableByWindowBackground = true
             window.contentView = hosting
             window.isReleasedWhenClosed = false
             window.center()

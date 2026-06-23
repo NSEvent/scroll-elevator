@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0 - 2026-06-23
+
+### Added
+- Settings redesigned as an elevator control panel: a graphite branded header
+  with the amber call-button accent from the icon, a tabbed layout (General /
+  Buttons / Apps), and a live overlay preview that reacts to the placement and
+  opacity sliders.
+
+### Changed
+- Button distance can now be set as far as 160 pt (was 80 pt), for placing the
+  buttons further out from the cursor.
+
+### Fixed
+- Welcome guide no longer truncates the last feature bullet ("…they never steal
+  focus or clicks") — long bullets now wrap correctly.
+
 ## 0.3.3 - 2026-06-11
 
 ### Changed
