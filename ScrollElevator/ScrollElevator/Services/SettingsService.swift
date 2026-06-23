@@ -15,6 +15,18 @@ final class SettingsService: ObservableObject {
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
     }
 
+    /// Factory defaults — single source of truth for both registration and the
+    /// per-section "Reset" actions.
+    enum Default {
+        static let enabled = true
+        static let neverHide = true
+        static let hideTimeout = 2.5
+        static let placementDistance = 56.0
+        static let scrollThreshold = 10.0
+        static let idleOpacity = 0.3
+        static let requiredModifier = ModifierGate.none
+    }
+
     private let defaults = UserDefaults.standard
 
     @Published var enabled: Bool {
@@ -66,13 +78,13 @@ final class SettingsService: ObservableObject {
 
     init() {
         defaults.register(defaults: [
-            Key.enabled: true,
-            Key.neverHide: true,
-            Key.hideTimeout: 2.5,
-            Key.placementDistance: 56.0,
-            Key.scrollThreshold: 10.0,
-            Key.idleOpacity: 0.3,
-            Key.requiredModifier: ModifierGate.none.rawValue,
+            Key.enabled: Default.enabled,
+            Key.neverHide: Default.neverHide,
+            Key.hideTimeout: Default.hideTimeout,
+            Key.placementDistance: Default.placementDistance,
+            Key.scrollThreshold: Default.scrollThreshold,
+            Key.idleOpacity: Default.idleOpacity,
+            Key.requiredModifier: Default.requiredModifier.rawValue,
             Key.hasCompletedOnboarding: false,
         ])
         enabled = defaults.bool(forKey: Key.enabled)
@@ -112,5 +124,24 @@ final class SettingsService: ObservableObject {
 
     func isIgnored(bundleIdentifier: String?) -> Bool {
         rule(for: bundleIdentifier) == .ignore
+    }
+
+    // MARK: - Per-section reset
+
+    var isPlacementDefault: Bool {
+        placementDistance == Default.placementDistance && scrollThreshold == Default.scrollThreshold
+    }
+
+    var isAppearanceDefault: Bool {
+        idleOpacity == Default.idleOpacity
+    }
+
+    func resetPlacement() {
+        placementDistance = Default.placementDistance
+        scrollThreshold = Default.scrollThreshold
+    }
+
+    func resetAppearance() {
+        idleOpacity = Default.idleOpacity
     }
 }

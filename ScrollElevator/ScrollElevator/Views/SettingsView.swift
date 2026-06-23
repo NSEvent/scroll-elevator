@@ -205,6 +205,8 @@ private struct SettingsCard<Content: View>: View {
     let systemImage: String
     var footnote: String? = nil
     var indentsContent: Bool = true
+    var resetDisabled: Bool = false
+    var onReset: (() -> Void)? = nil
     @ViewBuilder let content: Content
 
     /// Aligns indented content roughly under the section title (past the icon).
@@ -215,12 +217,16 @@ private struct SettingsCard<Content: View>: View {
         systemImage: String,
         footnote: String? = nil,
         indentsContent: Bool = true,
+        resetDisabled: Bool = false,
+        onReset: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.systemImage = systemImage
         self.footnote = footnote
         self.indentsContent = indentsContent
+        self.resetDisabled = resetDisabled
+        self.onReset = onReset
         self.content = content()
     }
 
@@ -234,6 +240,22 @@ private struct SettingsCard<Content: View>: View {
                     .font(.system(.caption, design: .rounded).weight(.semibold))
                     .foregroundStyle(.secondary)
                     .tracking(0.6)
+
+                if let onReset {
+                    Spacer(minLength: 8)
+                    Button(action: onReset) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.counterclockwise")
+                            Text("Reset")
+                        }
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.amber)
+                    .disabled(resetDisabled)
+                    .opacity(resetDisabled ? 0.35 : 1)
+                    .help("Restore this section to its default settings")
+                }
             }
 
             VStack(alignment: .leading, spacing: 12) {
@@ -369,7 +391,12 @@ private struct ButtonsPane: View {
         VStack(spacing: 16) {
             LivePreviewCard(distance: settings.placementDistance, idleOpacity: settings.idleOpacity)
 
-            SettingsCard(title: "Placement", systemImage: "arrow.up.and.down") {
+            SettingsCard(
+                title: "Placement",
+                systemImage: "arrow.up.and.down",
+                resetDisabled: settings.isPlacementDefault,
+                onReset: { withAnimation(.easeOut(duration: 0.2)) { settings.resetPlacement() } }
+            ) {
                 TunedSlider(
                     label: "Button distance",
                     value: $settings.placementDistance,
@@ -388,7 +415,9 @@ private struct ButtonsPane: View {
             SettingsCard(
                 title: "Appearance",
                 systemImage: "circle.lefthalf.filled",
-                footnote: "Buttons rest at this opacity and become fully opaque on hover."
+                footnote: "Buttons rest at this opacity and become fully opaque on hover.",
+                resetDisabled: settings.isAppearanceDefault,
+                onReset: { withAnimation(.easeOut(duration: 0.2)) { settings.resetAppearance() } }
             ) {
                 TunedSlider(
                     label: "Idle opacity",

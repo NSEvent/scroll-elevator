@@ -7,6 +7,8 @@
   with the amber call-button accent from the icon, a tabbed layout (General /
   Buttons / Apps), and a live overlay preview that reacts to the placement and
   opacity sliders.
+- Per-section "Reset" buttons in the Buttons tab restore Placement and
+  Appearance to their defaults (disabled when already at defaults).
 
 ### Changed
 - Button distance can now be set as far as 160 pt (was 80 pt), for placing the

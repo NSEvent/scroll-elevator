@@ -48,7 +48,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.title = "Scroll Elevator Settings"
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
-            window.isMovableByWindowBackground = true
             window.contentView = hosting
             window.isReleasedWhenClosed = false
             window.center()
