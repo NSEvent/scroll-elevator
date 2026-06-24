@@ -18,7 +18,7 @@ WRAPPER_NAME := $(shell $(BUILD_SETTINGS) 2>/dev/null | awk -F ' = ' '/WRAPPER_N
 APP_PATH := $(TARGET_BUILD_DIR)/$(WRAPPER_NAME)
 PROCESS_NAME := $(basename $(WRAPPER_NAME))
 
-.PHONY: gen build test install app-path clean
+.PHONY: gen build test install app-path clean notarize release
 
 gen:
 	xcodegen generate
@@ -52,6 +52,15 @@ install: build
 
 app-path:
 	@echo "$(APP_PATH)"
+
+# Build a universal, Developer-ID-signed, notarized, stapled DMG in ./release.
+notarize:
+	./Scripts/sign-and-notarize.sh
+
+# Full release: validate git, notarize DMG, tag, GitHub release, open ./release
+# for the Gumroad upload. Bump version.env first.
+release:
+	./Scripts/release.sh
 
 clean:
 	-xcodebuild -project $(PROJECT) -scheme $(SCHEME) clean 2>/dev/null
