@@ -443,6 +443,10 @@ private struct LivePreviewCard: View {
         return 12 + CGFloat(t) * 50
     }
 
+    /// Trailing inset per mock text line — full-width lines (0) interrupted by
+    /// a few short ones to suggest paragraph breaks.
+    private let lineInsets: [CGFloat] = [0, 0, 64, 0, 0, 38, 0, 96]
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -458,16 +462,19 @@ private struct LivePreviewCard: View {
                         )
                 )
 
-            // Mock page content.
+            // Mock page content. Lines flow the full width of the page; a
+            // varied trailing inset on some rows reads like paragraph text.
             VStack(alignment: .leading, spacing: 9) {
-                ForEach(0..<8, id: \.self) { row in
+                ForEach(lineInsets.indices, id: \.self) { row in
                     Capsule()
                         .fill(.primary.opacity(0.09))
-                        .frame(width: row % 3 == 2 ? 150 : 250, height: 7)
+                        .frame(height: 7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.trailing, lineInsets[row])
                 }
             }
             .padding(.top, 30)
-            .padding(.leading, 22)
+            .padding(.horizontal, 22)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
             // Traffic-light dots.
