@@ -23,17 +23,23 @@ DMG_BASENAME="ScrollElevator-${MARKETING_VERSION}.dmg"
 RELEASE_DIR="$PROJECT_ROOT/release"
 BUILD_DIR="$PROJECT_ROOT/build"
 
-# Notarization credentials. Default to Kevin's App Store Connect key in
-# ~/.config (the .p8 stays out of the repo); override via env if needed.
-API_KEY="${APP_STORE_CONNECT_API_KEY:-$HOME/.config/app-store-connect/AuthKey_REDACTED-KEY-ID.p8}"
-KEY_ID="${APP_STORE_CONNECT_KEY_ID:-REDACTED-KEY-ID}"
-ISSUER_ID="${APP_STORE_CONNECT_ISSUER_ID:-REDACTED-ISSUER-ID}"
+# Notarization credentials are kept out of source (this repo is public).
+# Resolution order: explicit env vars, else the App Store Connect key + issuer
+# in ~/.config/app-store-connect/ (AuthKey_<KEYID>.p8 and an `issuer_id` file).
+KEY_DIR="$HOME/.config/app-store-connect"
+API_KEY="${APP_STORE_CONNECT_API_KEY:-$(ls "$KEY_DIR"/AuthKey_*.p8 2>/dev/null | head -1)}"
+KEY_ID="${APP_STORE_CONNECT_KEY_ID:-}"
+if [[ -z "$KEY_ID" && -n "${API_KEY:-}" ]]; then
+    KEY_ID="$(basename "$API_KEY" .p8 | sed 's/^AuthKey_//')"
+fi
+ISSUER_ID="${APP_STORE_CONNECT_ISSUER_ID:-$(cat "$KEY_DIR/issuer_id" 2>/dev/null || true)}"
 
 echo "=== Sign and Notarize: Scroll Elevator ${MARKETING_VERSION} (${BUILD_NUMBER}) ==="
 
-if [[ ! -f "$API_KEY" ]]; then
-    echo "Warning: notarization key not found at $API_KEY"
-    echo "Set APP_STORE_CONNECT_API_KEY / _KEY_ID / _ISSUER_ID to notarize."
+if [[ -z "${API_KEY:-}" || ! -f "$API_KEY" || -z "$KEY_ID" || -z "$ISSUER_ID" ]]; then
+    echo "Warning: App Store Connect credentials not found — notarization will be skipped."
+    echo "Provide APP_STORE_CONNECT_API_KEY / _KEY_ID / _ISSUER_ID, or put"
+    echo "AuthKey_<KEYID>.p8 and an 'issuer_id' file in $KEY_DIR."
     SKIP_NOTARIZATION=1
 else
     SKIP_NOTARIZATION=0
