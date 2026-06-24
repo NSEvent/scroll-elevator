@@ -60,6 +60,7 @@ xcodebuild -project "$PROJECT" \
     CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
     CODE_SIGN_STYLE="Manual" \
     ENABLE_HARDENED_RUNTIME="YES" \
+    CODE_SIGN_INJECT_BASE_ENTITLEMENTS="NO" \
     OTHER_CODE_SIGN_FLAGS="--timestamp" \
     -allowProvisioningUpdates \
     build
