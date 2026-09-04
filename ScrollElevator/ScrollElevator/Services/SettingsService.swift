@@ -8,6 +8,7 @@ final class SettingsService: ObservableObject {
         static let hideTimeout = "hideTimeout"
         static let placementDistance = "placementDistance"
         static let scrollThreshold = "scrollThreshold"
+        static let cruiseSpeedMultiplier = "cruiseSpeedMultiplier"
         static let idleOpacity = "idleOpacity"
         static let requiredModifier = "requiredModifier"
         static let appRules = "appRules"
@@ -23,11 +24,12 @@ final class SettingsService: ObservableObject {
         static let hideTimeout = 2.5
         static let placementDistance = 56.0
         static let scrollThreshold = 10.0
+        static let cruiseSpeedMultiplier = CruiseSpeedCurve.defaultMultiplier
         static let idleOpacity = 0.3
         static let requiredModifier = ModifierGate.none
     }
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
 
     @Published var enabled: Bool {
         didSet { defaults.set(enabled, forKey: Key.enabled) }
@@ -55,6 +57,17 @@ final class SettingsService: ObservableObject {
         didSet { defaults.set(scrollThreshold, forKey: Key.scrollThreshold) }
     }
 
+    /// Scales the complete hold-to-cruise curve. A value of 1 preserves the
+    /// original 500→2,500 pt/s behavior.
+    @Published var cruiseSpeedMultiplier: Double {
+        didSet {
+            defaults.set(
+                CruiseSpeedCurve.clampedMultiplier(cruiseSpeedMultiplier),
+                forKey: Key.cruiseSpeedMultiplier
+            )
+        }
+    }
+
     /// Button opacity at rest (hover is always fully opaque).
     @Published var idleOpacity: Double {
         didSet { defaults.set(idleOpacity, forKey: Key.idleOpacity) }
@@ -76,13 +89,15 @@ final class SettingsService: ObservableObject {
         didSet { defaults.set(hasCompletedOnboarding, forKey: Key.hasCompletedOnboarding) }
     }
 
-    init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         defaults.register(defaults: [
             Key.enabled: Default.enabled,
             Key.neverHide: Default.neverHide,
             Key.hideTimeout: Default.hideTimeout,
             Key.placementDistance: Default.placementDistance,
             Key.scrollThreshold: Default.scrollThreshold,
+            Key.cruiseSpeedMultiplier: Default.cruiseSpeedMultiplier,
             Key.idleOpacity: Default.idleOpacity,
             Key.requiredModifier: Default.requiredModifier.rawValue,
             Key.hasCompletedOnboarding: false,
@@ -92,6 +107,9 @@ final class SettingsService: ObservableObject {
         hideTimeout = defaults.double(forKey: Key.hideTimeout)
         placementDistance = defaults.double(forKey: Key.placementDistance)
         scrollThreshold = defaults.double(forKey: Key.scrollThreshold)
+        cruiseSpeedMultiplier = CruiseSpeedCurve.clampedMultiplier(
+            defaults.double(forKey: Key.cruiseSpeedMultiplier)
+        )
         idleOpacity = defaults.double(forKey: Key.idleOpacity)
         requiredModifier = ModifierGate(
             rawValue: defaults.string(forKey: Key.requiredModifier) ?? ""
@@ -136,6 +154,10 @@ final class SettingsService: ObservableObject {
         idleOpacity == Default.idleOpacity
     }
 
+    var isCruiseDefault: Bool {
+        cruiseSpeedMultiplier == Default.cruiseSpeedMultiplier
+    }
+
     func resetPlacement() {
         placementDistance = Default.placementDistance
         scrollThreshold = Default.scrollThreshold
@@ -143,5 +165,9 @@ final class SettingsService: ObservableObject {
 
     func resetAppearance() {
         idleOpacity = Default.idleOpacity
+    }
+
+    func resetCruise() {
+        cruiseSpeedMultiplier = Default.cruiseSpeedMultiplier
     }
 }

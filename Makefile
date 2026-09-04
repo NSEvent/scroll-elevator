@@ -33,7 +33,8 @@ build:
 test:
 	@test -d $(PROJECT) || $(MAKE) gen
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug \
-		-destination 'platform=macOS' DEVELOPMENT_TEAM=$(TEAM_ID) test
+		-destination 'platform=macOS' DEVELOPMENT_TEAM=$(TEAM_ID) \
+		CODE_SIGN_IDENTITY="$(SIGN_IDENTITY)" CODE_SIGN_STYLE=Manual test
 
 # Clean-replace before ditto (ditto MERGES into an existing bundle — stale
 # files from previous builds break the signature seal and reset TCC grants),

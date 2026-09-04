@@ -309,10 +309,6 @@ final class OverlayController {
     private var cruiseStopMonitor: Any?
 
     private let cruiseDelay: TimeInterval = 0.35
-    /// Cruise speed ramp, in points/second.
-    private let cruiseBaseSpeed: Double = 500
-    private let cruiseAcceleration: Double = 700  // per second of hold
-    private let cruiseMaxSpeed: Double = 2500
     private let cruiseTickHz: Double = 60
     /// Hard cap — a lost mouse-up can never scroll forever.
     private let cruiseMaxDuration: TimeInterval = 20
@@ -381,8 +377,12 @@ final class OverlayController {
             stopCruise()
             return
         }
-        let speed = min(cruiseMaxSpeed, cruiseBaseSpeed + cruiseAcceleration * elapsed)
-        JumpDispatcher.cruiseTick(direction, pixels: Int32((speed / cruiseTickHz).rounded()))
+        let pixels = CruiseSpeedCurve.pixelsPerTick(
+            elapsed: elapsed,
+            multiplier: settings.cruiseSpeedMultiplier,
+            tickRate: cruiseTickHz
+        )
+        JumpDispatcher.cruiseTick(direction, pixels: pixels)
     }
 
     private func stopCruise() {

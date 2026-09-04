@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 - 2026-09-04
+
+### Added
+- Cruise Speed in Settings → Buttons, adjustable from 25% to 200%. The 100%
+  default preserves the existing hold-to-cruise acceleration curve.
+
 ## 0.4.0 - 2026-06-23
 
 ### Added

@@ -413,6 +413,22 @@ private struct ButtonsPane: View {
             }
 
             SettingsCard(
+                title: "Hold to Cruise",
+                systemImage: "speedometer",
+                footnote: "Controls continuous scrolling while you hold an arrow. Quick-click jumps are unchanged.",
+                resetDisabled: settings.isCruiseDefault,
+                onReset: { withAnimation(.easeOut(duration: 0.2)) { settings.resetCruise() } }
+            ) {
+                TunedSlider(
+                    label: "Cruise speed",
+                    value: $settings.cruiseSpeedMultiplier,
+                    range: CruiseSpeedCurve.supportedMultipliers,
+                    step: 0.05,
+                    unit: { String(format: "%.0f%%", $0 * 100) }
+                )
+            }
+
+            SettingsCard(
                 title: "Appearance",
                 systemImage: "circle.lefthalf.filled",
                 footnote: "Buttons rest at this opacity and become fully opaque on hover.",
@@ -514,7 +530,22 @@ private struct TunedSlider: View {
     let label: String
     @Binding var value: Double
     let range: ClosedRange<Double>
+    let step: Double?
     let unit: (Double) -> String
+
+    init(
+        label: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double? = nil,
+        unit: @escaping (Double) -> String
+    ) {
+        self.label = label
+        _value = value
+        self.range = range
+        self.step = step
+        self.unit = unit
+    }
 
     var body: some View {
         VStack(spacing: 7) {
@@ -528,7 +559,11 @@ private struct TunedSlider: View {
                     .padding(.vertical, 3)
                     .background(Capsule().fill(Theme.amber.opacity(0.14)))
             }
-            Slider(value: $value, in: range)
+            if let step {
+                Slider(value: $value, in: range, step: step)
+            } else {
+                Slider(value: $value, in: range)
+            }
         }
     }
 }
