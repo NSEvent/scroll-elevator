@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.1 - 2026-09-04
+## 0.5.0 - 2026-09-04
 
 ### Added
 - Cruise Speed in Settings → Buttons, adjustable from 25% to 200%. The 100%
