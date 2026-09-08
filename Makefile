@@ -43,7 +43,7 @@ test:
 install: build
 	-pkill -x "$(PROCESS_NAME)" || true
 	sleep 1
-	rm -rf "/Applications/$(WRAPPER_NAME)"
+	@if [ -e "/Applications/$(WRAPPER_NAME)" ]; then trash "/Applications/$(WRAPPER_NAME)"; fi
 	/usr/bin/ditto "$(APP_PATH)" "/Applications/$(WRAPPER_NAME)"
 	codesign --force --sign "$(SIGN_IDENTITY)" --options runtime --timestamp=none \
 		--entitlements ScrollElevator/ScrollElevator/Resources/ScrollElevator.entitlements \

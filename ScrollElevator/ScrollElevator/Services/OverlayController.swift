@@ -255,6 +255,8 @@ final class OverlayController {
     private func removeClickTap() {
         if let tap = clickTap {
             CGEvent.tapEnable(tap: tap, enable: false)
+            // Break the Mach-port/run-loop-source retention cycle.
+            CFMachPortInvalidate(tap)
         }
         if let source = clickTapSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
