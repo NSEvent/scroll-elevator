@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1 - 2026-09-08
+
+### Fixed
+- Fully release input hooks when the overlay closes, preventing stale hooks from
+  accumulating during long sessions and contributing to system-wide input lag.
+
+### Changed
+- The demo capture script now shows a quick jump to the bottom with clearer timing.
+
 ## 0.5.0 - 2026-09-04
 
 ### Added

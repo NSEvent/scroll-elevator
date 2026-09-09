@@ -179,13 +179,13 @@ time.sleep(0.7)
 press(cx, cy - DIST, 0.12)
 time.sleep(1.3)
 
-# 3) Scroll down again, hover jump-to-bottom, then HOLD to cruise to BOTTOM.
-scroll(-70, ticks=12)
+# 3) Scroll down again, hover jump-to-bottom, then CLICK to snap to the BOTTOM.
+scroll(-60, ticks=10)
 time.sleep(0.6)
 glide(cx, cy, cx, cy + DIST)
-time.sleep(0.5)
-press(cx, cy + DIST, 1.6)   # >0.35s engages hold-to-cruise
-time.sleep(0.9)
+time.sleep(0.6)
+press(cx, cy + DIST, 0.12)   # quick click = jump straight to the bottom
+time.sleep(1.3)
 PY
 
 wait "$REC_PID" 2>/dev/null || true
