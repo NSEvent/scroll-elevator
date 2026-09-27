@@ -11,6 +11,7 @@ final class SettingsService: ObservableObject {
         static let cruiseSpeedMultiplier = "cruiseSpeedMultiplier"
         static let idleOpacity = "idleOpacity"
         static let requiredModifier = "requiredModifier"
+        static let showOnLongPress = "showOnLongPress"
         static let appRules = "appRules"
         static let ignoredBundleIDs = "ignoredBundleIDs"  // legacy, migrated into appRules
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
@@ -27,6 +28,7 @@ final class SettingsService: ObservableObject {
         static let cruiseSpeedMultiplier = CruiseSpeedCurve.defaultMultiplier
         static let idleOpacity = 0.3
         static let requiredModifier = ModifierGate.none
+        static let showOnLongPress = false
     }
 
     private let defaults: UserDefaults
@@ -78,6 +80,12 @@ final class SettingsService: ObservableObject {
         didSet { defaults.set(requiredModifier.rawValue, forKey: Key.requiredModifier) }
     }
 
+    /// When true, pressing and holding the left mouse button in place also
+    /// summons the overlay at the cursor — no scroll needed. Off by default.
+    @Published var showOnLongPress: Bool {
+        didSet { defaults.set(showOnLongPress, forKey: Key.showOnLongPress) }
+    }
+
     /// Per-app jump rules keyed by bundle identifier. Absent = .auto.
     @Published var appRules: [String: JumpRule] {
         didSet {
@@ -100,6 +108,7 @@ final class SettingsService: ObservableObject {
             Key.cruiseSpeedMultiplier: Default.cruiseSpeedMultiplier,
             Key.idleOpacity: Default.idleOpacity,
             Key.requiredModifier: Default.requiredModifier.rawValue,
+            Key.showOnLongPress: Default.showOnLongPress,
             Key.hasCompletedOnboarding: false,
         ])
         enabled = defaults.bool(forKey: Key.enabled)
@@ -114,6 +123,7 @@ final class SettingsService: ObservableObject {
         requiredModifier = ModifierGate(
             rawValue: defaults.string(forKey: Key.requiredModifier) ?? ""
         ) ?? .none
+        showOnLongPress = defaults.bool(forKey: Key.showOnLongPress)
         hasCompletedOnboarding = defaults.bool(forKey: Key.hasCompletedOnboarding)
 
         var rules: [String: JumpRule] = [:]

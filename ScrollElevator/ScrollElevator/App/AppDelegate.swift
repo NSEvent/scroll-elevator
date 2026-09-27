@@ -4,6 +4,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings: SettingsService!
     private var scrollMonitor: ScrollMonitor!
+    private var longPressMonitor: LongPressMonitor!
     private var overlayController: OverlayController!
     private var menuBarService: MenuBarService!
     private var settingsWindow: NSWindow?
@@ -13,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings = SettingsService()
         overlayController = OverlayController(settings: settings)
         scrollMonitor = ScrollMonitor(settings: settings, overlayController: overlayController)
+        // Starts itself from its settings subscription when enabled.
+        longPressMonitor = LongPressMonitor(settings: settings, overlayController: overlayController)
         menuBarService = MenuBarService(
             settings: settings,
             openSettings: { [weak self] in self?.showSettingsWindow() },
@@ -33,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         scrollMonitor.stop()
+        longPressMonitor.stop()
     }
 
     private func showSettingsWindow() {

@@ -300,6 +300,10 @@ private struct GeneralPane: View {
             SettingsCard(title: "Behavior", systemImage: "switch.2") {
                 Toggle("Show elevator buttons after scrolling", isOn: $settings.enabled)
                 Divider().opacity(0.4)
+                Toggle("Show elevator buttons after holding left mouse click", isOn: $settings.showOnLongPress)
+                    .disabled(!settings.enabled)
+                    .help("Press and hold the left mouse button in place for half a second to summon the buttons at the cursor.")
+                Divider().opacity(0.4)
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, newValue in
                         LaunchAtLogin.set(newValue)

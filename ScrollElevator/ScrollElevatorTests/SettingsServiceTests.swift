@@ -33,6 +33,15 @@ final class SettingsServiceTests: XCTestCase {
         XCTAssertTrue(reloaded.isCruiseDefault)
     }
 
+    func testShowOnLongPressDefaultsOffAndPersists() {
+        let settings = SettingsService(defaults: defaults)
+        XCTAssertFalse(settings.showOnLongPress)
+
+        settings.showOnLongPress = true
+
+        XCTAssertTrue(SettingsService(defaults: defaults).showOnLongPress)
+    }
+
     func testCruiseSpeedClampsCorruptStoredValueOnLoad() {
         defaults.set(99.0, forKey: "cruiseSpeedMultiplier")
 

@@ -67,7 +67,7 @@ final class OverlayController {
         return timer
     }
 
-    func show(for newTarget: ScrollTarget, at anchorPoint: NSPoint) {
+    func show(for newTarget: ScrollTarget, at anchorPoint: NSPoint, ignoringCooldown: Bool = false) {
         if let panel, panel.isVisible {
             // Already up: adopt the new target, keep the anchor stable unless the
             // user has clearly moved, and just extend the timeout (no re-animation).
@@ -80,7 +80,7 @@ final class OverlayController {
             return
         }
 
-        guard Date().timeIntervalSince(lastHideAt) >= cooldown else { return }
+        guard ignoringCooldown || Date().timeIntervalSince(lastHideAt) >= cooldown else { return }
 
         target = newTarget
         anchor = anchorPoint
@@ -426,8 +426,10 @@ final class OverlayController {
 
         // Track hover from raw movement (the panel is click-through, so SwiftUI
         // never reports it) and hide on a corridor exit. Never dismiss by
-        // movement while a button is hovered.
-        let moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved], handler: { [weak self] _ in
+        // movement while a button is hovered. Drags count too: a long press
+        // shows the overlay with the button still down, and dragging away from
+        // there (say, into a text selection) should dismiss it the same way.
+        let moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged], handler: { [weak self] _ in
             guard let self else { return }
             let location = NSEvent.mouseLocation
             let over = self.button(at: location)

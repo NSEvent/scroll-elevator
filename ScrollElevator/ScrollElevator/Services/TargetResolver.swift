@@ -3,7 +3,9 @@ import AppKit
 /// Resolves the window under the cursor (scroll-follows-mouse means the scrolled
 /// window is not necessarily the frontmost one).
 enum TargetResolver {
-    static func resolve(atCocoaPoint point: NSPoint) -> ScrollTarget? {
+    /// - Parameter allowFrontmostFallback: when no normal window is under the
+    ///   point (menu bar, Dock, desktop), fall back to the frontmost app.
+    static func resolve(atCocoaPoint point: NSPoint, allowFrontmostFallback: Bool = true) -> ScrollTarget? {
         let ownPID = ProcessInfo.processInfo.processIdentifier
 
         if let pid = windowOwnerPID(atCocoaPoint: point), pid != ownPID {
@@ -17,7 +19,8 @@ enum TargetResolver {
         }
 
         // Fallback: frontmost app.
-        guard let front = NSWorkspace.shared.frontmostApplication,
+        guard allowFrontmostFallback,
+              let front = NSWorkspace.shared.frontmostApplication,
               front.processIdentifier != ownPID else { return nil }
         return ScrollTarget(
             pid: front.processIdentifier,
