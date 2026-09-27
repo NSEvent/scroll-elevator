@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 - 2026-09-26
+
+### Added
+- "Show elevator buttons after holding left mouse click" in Settings → General.
+  When on, pressing and holding the left mouse button still for half a second
+  summons the buttons at the cursor—no scroll needed. Moving the pointer,
+  releasing early, or double-clicking cancels, so text selection and window
+  drags are unaffected. Off by default.
+
 ## 0.5.1 - 2026-09-08
 
 ### Fixed
